@@ -1,0 +1,3459 @@
+---
+title: "International Global Analysis"
+author: "Enyu Li"
+date: "2025-07-03"
+output: pdf_document
+---
+
+# 1. First Import all of the datasets
+```{r}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+```
+
+
+This chunk of codes is to figure out some ranking for different countries. 
+And the dataset for this chunk of codes use the dataset of UN_voting.csv
+```{r}
+undf <- read.csv("UN_voting.csv")
+undf <- undf[,-1]
+
+
+undf %>% 
+  filter(ccode1 == 2, year == 2023) %>% 
+  arrange(agree) %>% 
+  select(country2)
+
+undf %>% 
+  filter(country1 == "China", year == 2023) %>% 
+  arrange(desc(agree)) %>% 
+  mutate(rank = row_number()) %>% 
+  filter(country2 == "Russia")
+
+
+undf %>% 
+  filter(country1 == "Canada", year == 2023) %>% 
+  arrange(desc(agree)) %>%
+  select(country2,agree)
+
+undf %>% 
+  filter(country1 == "Brazil", year == 2023) %>% 
+  arrange(desc(agree)) %>% 
+  mutate(rank = row_number()) %>% 
+  filter(country2 %in% c("China", "United States of America"))
+```
+Some findings of the codes above (just for fun): 
+For China, Russia ranked 107th in terms of voting similarity with China
+For Russia, China ranked 7th in terms of voting similarity with Russia. 
+This indicates that China votes much more independently, while Russia votes more aligned with China. 
+
+For both Israel and USA, the other ranked 1st for voting similarity, indicating that USA and Israel is the most important ally. 
+
+From India's perspective, China votes much more similarly with India than that of the United States, although India is joining the United States to deter China militarily. 
+
+#####################
+Now extract dataset that only has country1 = "US" or "China"
+I will use this dataset for further usage.
+```{r}
+un_us_China <- read.csv("UN_voting_US_China.csv")
+
+head(un_us_China)
+tail(un_us_China)
+```
+For the UN voting, should IdeaPointDistance and agree both features 
+
+#####################
+
+
+#######################################################
+Now getting another dataset
+```{r}
+load("vdem.RData")
+
+head(vdem)
+
+vdem %>% 
+  filter(year > 1945) %>%
+  select(v2x_regime,v2x_polyarchy)
+  
+colnames(vdem)
+
+
+grep("regime", colnames(vdem), value = TRUE)
+
+vdem %>% 
+  filter(year == 2024,
+         v2x_regime == 0) %>% 
+  select(country_name)
+  
+
+vdem %>% 
+  filter(country_name == "India",year == 2023) %>%
+  select(v2x_regime)
+
+vdem %>% 
+  filter(country_name == "India", year == 2023) %>% 
+  
+vdem %>% 
+  arrange(desc(year)) 
+
+
+vdem %>% 
+  filter (country_name == "Hong Kong", year > 1990) %>% 
+  select(v2x_regime)
+
+vdem %>% 
+  filter (year == 2023) %>% 
+  arrange(desc(v2x_polyarchy)) %>% 
+  mutate(rank = row_number()) %>% 
+  select(country_name, v2x_polyarchy,v2x_regime, rank) 
+
+unique(vdem$country_id)
+
+sum(vdem$country_id == 2)
+sum(vdem$country_name == "United States of America")
+
+vdem %>% 
+  filter(country_name == "United States of America") %>%
+  select(country_name, country_text_id, country_id)
+
+vdem %>% 
+  filter(year == 2023) %>% 
+  arrange(v2x_liberal) %>% thee
+
+
+vdem %>% 
+  filter(year == 2023) %>% 
+  arrange(desc(v2x_libdem)) %>% 
+  select(country_name)
+```
+
+## This part is to find the degree of liberal democracy
+3 things to consider: v2x_regime, v2x_polyarchy, and v2x_libdem. 
+Use the feature of v2x_libdem to indicate the level of liberal democracy and electoral fairness. 
+```{r}
+target<- vdem %>% 
+  filter (year >= 1946 & year <= 2023) %>% 
+  select (country_name, country_text_id, year, v2x_libdem)
+```
+
+combine the two dataset together
+```{r}
+combined_df <- un_us_China %>% 
+  left_join(target, by = c("country2" = "country_name", "year" = "year"))
+
+
+head(combined_df)
+
+combined_df %>% 
+  arrange(desc(v2x_libdem)) %>% 
+  select(country2, v2x_libdem)
+
+
+head(combined_df)
+# now shrink this entire dataset
+
+useful_colnames <- c("country1","country2","StateAbb.x","StateAbb.y","year","agree","IdealPointDistance","v2x_libdem" )
+
+combined_df <- combined_df %>% 
+  select(all_of(useful_colnames))
+
+combined_df <- combined_df %>% 
+  rename(
+    country1.abb = StateAbb.x,
+    country2.abb = StateAbb.y,
+    UN.agree = agree, 
+    UN.IdealPointDistance = IdealPointDistance, 
+    country2.libdem = v2x_libdem
+  )
+
+combined_df
+
+# Export this dataframe 
+write.csv(combined_df, "updated_combined.csv")
+```
+
+This updated_combined.csv includes all of the features, including the UN_voting similarity, UN_IdealDistance, and the political liberal democracy index. 
+
+```{r}
+df <- read.csv("updated_combined.csv")
+df <- df[,-1]
+
+head(df,10)
+
+head(target)
+
+df2 <- df %>% 
+  left_join(target,  by = c("country1.abb" = "country_text_id", "year" = "year"))
+
+tail(df2,30)
+           
+df2 <- df2 %>%
+  rename(country1.libdem = v2x_libdem)
+
+tail(df2,30)
+
+
+```
+
+
+
+```{r}
+un_df <- read.csv("UN_voting.csv")
+head(un_df)
+```
+
+Features to include 
+1.UN.IdeaPointAll.x
+2.agree with China(voting)
+3.agree with US(voting)
+4.v2x.libdem
+5.v2x.polyarchy
+
+
+First create such a dataset
+```{r}
+idealpoints <- un_df %>% 
+  select(country1, StateAbb.x, year, IdealPointAll.x) %>%
+  distinct() %>% 
+  rename (country = country1)
+
+agree_with_China <- un_df %>%
+  filter(country2 == "China") %>% 
+  select(country1, year, agree) %>% 
+  rename(country = country1,
+         agree_China = agree) 
+
+agree_with_USA <- un_df %>% 
+  filter(country2 == "United States of America") %>%
+  select(country1, year, agree) %>% 
+  rename(country = country1,
+         agree_USA = agree)
+
+
+final_data <- idealpoints %>%
+  left_join(agree_with_China, by = c("country","year")) %>% 
+  left_join(agree_with_USA, by = c("country","year"))
+
+
+head(final_data)
+
+data_2023 <- final_data %>% 
+  filter(year == 2023)
+
+
+```
+
+```{r}
+final_data <- final_data %>%
+  mutate(
+    agree_USA = ifelse(country == "United States of America" & is.na(agree_USA), 1, agree_USA),
+    agree_China = ifelse(country == "China" & is.na(agree_China), 1, agree_China)
+  )
+
+
+NA_rows <- which(rowSums(is.na(final_data)) > 0)
+final_data[NA_rows,]
+
+final_data <- final_data %>% 
+  filter(year >= 1971)
+
+head(final_data)
+
+# Historical Events
+which(rowSums(is.na(final_data)) > 0)
+# 1. 115: Taiwan is kicked out of UN in 1971, and China gained the seat
+# 2. 3313: Cambodia is under the UN peacekeeping
+# 3. 3443: South Africa when the final negotiations for democratic transition were completed.
+
+final_data %>% 
+  filter(country == "South Africa")
+
+final_data %>% 
+  filter (year > 1974 & year < 1993)
+
+
+unique(final_data$year)
+```
+
+```{r}
+head(vdem)
+colnames(final_data)
+colnames(vdem_chosen)
+target <- vdem %>% 
+  filter(year >= 1971 & year <= 2023)
+
+
+vdem_chosen <- target %>% 
+  select(country_name, year, v2x_libdem,v2x_polyarchy)
+
+final_data <- final_data %>% 
+  left_join(vdem_chosen,
+            by = c("country" = "country_name","year"))
+
+final_data
+```
+
+
+```{r}
+write.csv(final_data, "each_country.characters.csv")
+
+final_data %>% 
+  arrange(ycountry)
+```
+
+
+###############
+Now import the alliance dataset
+```{r}
+ally.df <- read.csv("alliance.csv")
+head(ally.df)
+```
+
+```{r}
+ally.df %>% 
+  filter(year >= 1971 & year <= 2023)
+colnames(ally.df)
+
+```
+```{r}
+ally.df <- read.csv("alliance_dyad.csv")
+head(ally.df)
+
+ally.df %>% filter(state_name2 == "China",
+                   year >= 1971)
+
+unique(ally.df$year)
+```
+
+```{r}
+
+arm_df <- read.csv("arm_exports_clean.csv")
+
+head(arm_df)
+nrow(arm_df)
+colnames(arm_df)[3:ncol(arm_df)] <- 1971:2023
+
+# first fill all the NA with 0s
+arm_df[is.na(arm_df)] = 0
+
+# transform the wide table to long table 
+arm_df2 <- arm_df %>% 
+  pivot_longer(
+    cols = "1971":"2023",  # columns selected from the orginal dataset to use the current rows 
+    names_to = "year",  # set the name of all of the row numbers 
+    values_to = "Imports" # set the name of the values 
+  ) %>% 
+  mutate(year = as.double(year))
+
+arm_df2
+
+write.csv(arm_df2, "US_China_arm_imports_long_table.csv")
+```
+
+```{r}
+# 
+final_data
+arm_df2
+
+# combine the final_data with US and China military imports 
+
+US_import <- arm_df2 %>% 
+  filter (Giver == "United States of America") %>% 
+  select(Recipient, year, Imports)
+
+China_import <-arm_df2 %>% 
+  filter(Giver == "China") %>% 
+  select(Recipient, year, Imports)
+
+final_data2 <- final_data %>% 
+  left_join(US_import, by = c("year", "country" = "Recipient")) %>%
+  rename (Military_Imports_USA = Imports) %>% 
+  left_join(China_import, by = c("year", "country" = "Recipient")) %>%
+  rename (Military_Imports_China = Imports) %>% 
+  mutate(Military_Imports_USA = replace_na(Military_Imports_USA, 0)) %>% 
+  mutate(Military_Imports_China = replace_na(Military_Imports_China,0))
+
+colnames(final_data2)
+final_data2 %>% 
+  filter (year == 2023) %>% 
+  filter(Military_Imports_China > 0 )
+
+three_aid %>%
+  
+
+```
+```{r}
+write.csv(final_data2, "most_updated_final_data.csv")
+```
+
+
+```{r}
+#  incorporate the military aid from the United States 
+US_military_aid <- read.csv("us_foreign_aid_country.csv")
+
+origin_df <- read.csv("most_updated_final_data.csv")
+
+head(US_military_aid)
+colnames(US_military_aid)
+# select dataset only from 1971 to 2023  and the corresponding columns 
+# constant_amount indicates the money that is equal to therefore 
+Aid_df <- US_military_aid %>% 
+  filter (Fiscal.Year >= 1971 & Fiscal.Year <= 2023) %>%
+  select(Country.Code, Fiscal.Year,constant_amount) %>% 
+  mutate(Fiscal.Year = as.numeric(Fiscal.Year))
+
+
+# combine the military aid dataset with the country
+combined <- origin_df %>% 
+  left_join(Aid_df, by = c("StateAbb.x"= "Country.Code", "year" = "Fiscal.Year"))
+
+head(combined)
+combined %>%
+  filter(year == 2023)
+
+
+colnames(Aid_df)
+aggregate_aid_df <- Aid_df %>% 
+  group_by(Fiscal.Year, Country.Code) %>% 
+  summarise (total_aid = sum(constant_amount, na.rm = TRUE)) %>% 
+  arrange(desc(total_aid))
+
+combined <- origin_df %>%
+  left_join(aggregate_aid_df, by = c("StateAbb.x" = "Country.Code", "year" = "Fiscal.Year"))
+
+nrow(origin_df)
+nrow(combined)
+
+combined <- combined %>% 
+  rename(US_military_aid = total_aid)
+
+combined <- combined %>% 
+  mutate(US_military_aid = ifelse(is.na(US_military_aid), 0, US_military_aid))
+
+w
+```
+
+```{r}
+missing_rows <- test%>%
+  filter(is.na(v2x_libdem) & is.na(v2x_polyarchy))
+
+
+nrow(missing_rows)
+
+unique(missing_rows$country)
+missing_rows %>% 
+  filter(country == "Turkey")
+
+
+load("vdem.RData")
+head(vdem)
+
+targetvdem <- vdem %>% 
+  select(country_text_id,year, v2x_libdem, v2x_polyarchy) %>% 
+  filter(year >= 1971 & year <= 2023)
+
+combined2 <- combined %>% 
+  select(-v2x_libdem,-v2x_polyarchy)
+
+test <- combined2 %>% 
+  left_join(targetvdem, by = c("StateAbb.x" = "country_text_id", "year")) 
+
+
+unique(targetvdem$country_text_id)
+unique(combined2$StateAbb.x)
+
+
+
+library(countrycode)
+
+# Create mapping table using ISO3 code to country name
+country_map <- tibble(
+  StateAbb.x = unique(combined2$StateAbb.x)
+) %>%
+  mutate(country_name = countrycode(StateAbb.x, origin = "iso3c", destination = "country.name"))
+
+# Preview
+head(country_map)
+```
+
+```{r}
+missing_rows <- combined %>% 
+  filter(is.na(v2x_libdem) & is.na(v2x_polyarchy))
+unique(missing_rows$country)
+
+
+vdem <- vdem %>%
+  mutate(country_name = ifelse(country_name == "Türkiye", "Turkey", country_name))
+
+
+
+vdem %>% 
+  select(country_name, year, v2x_libdem, v2x_polyarchy) %>% 
+  filter(country_name == "Ukraine")
+
+unique(vdem$country_name)
+
+
+
+joined_df <- combined %>%
+  left_join(vdem %>% select(country_name, year, v2x_libdem, v2x_polyarchy),
+            by = c("country" = "country_name", "year" = "year"))
+
+head(joined_df)
+
+# deal with Turkey 
+joined_df <- joined_df %>% 
+  select(-v2x_libdem.x,-v2x_polyarchy.x)
+
+# deal with Ukraine
+
+
+missing_rows <- joined_df %>% 
+  filter(is.na(v2x_libdem.y) & is.na(v2x_polyarchy.y))
+unique(missing_rows$country)
+
+missing_rows %>% 
+  filter(country == "Ukraine")
+
+
+# Step 1: Extract Russia's values for 1971–1991
+russia_values <- vdem %>%
+  filter(country_name == "Russia", year >= 1971 & year <= 1989) %>%
+  select(year, v2x_libdem, v2x_polyarchy) %>%
+  mutate(StateAbb.x %in% c("UKR","BLR" ))  # Use the same code for Ukraine in combined2
+
+# Step 2: Fill in the missing values in combined2
+joined_df2 <- joined_df %>%
+  left_join(russia_values, by = c("StateAbb.x" = "StateAbb.x", "year" = "year")) %>%
+  mutate(
+    v2x_libdem = if_else(is.na(v2x_libdem), v2x_libdem.y, v2x_libdem),
+    v2x_polyarchy = if_else(is.na(v2x_polyarchy), v2x_polyarchy.y, v2x_polyarchy)
+  ) %>%
+  select(-v2x_libdem.y, -v2x_polyarchy.y)  # clean up extra columns
+```
+
+
+```{r}
+joined_df2 %>% 
+  filter(country %in% c("Ukraine","Belarus"))
+```
+
+```{r}
+missing_rows <- joined_df2 %>% 
+  filter(is.na(v2x_libdem) & is.na(v2x_polyarchy))
+unique(missing_rows$country)
+```
+
+```{r}
+library(dplyr)
+
+# Step 1: Extract Russia's values from vdem
+russia_values <- vdem %>%
+  filter(country_name == "Russia", year >= 1971 & year <= 2023) %>%
+  select(year, v2x_libdem, v2x_polyarchy)
+
+# Step 2: For Belarus and Ukraine in your combined dataset,
+# replace their NA values with Russia's values by joining on year
+
+combined_fixed <- combined %>%
+  left_join(
+    russia_values,
+    by = "year",
+    suffix = c("", "_russia")
+  ) %>%
+  mutate(
+    v2x_libdem = if_else(country %in% c("Ukraine", "Belarus") & is.na(v2x_libdem),
+                         v2x_libdem_russia, v2x_libdem),
+    v2x_polyarchy = if_else(country %in% c("Ukraine", "Belarus") & is.na(v2x_polyarchy),
+                            v2x_polyarchy_russia, v2x_polyarchy)
+  ) %>%
+  select(-v2x_libdem_russia, -v2x_polyarchy_russia)
+
+write.csv(combined_fixed,"combined_fixed.csv")
+```
+
+
+```{r}
+combined_fixed <- read.csv("combined_fixed.csv")
+combined_fixed <- combined_fixed[,-1]
+
+missing_rows <- combined_fixed %>% 
+  filter(is.na(v2x_libdem) & is.na(v2x_polyarchy))
+unique(missing_rows$country)
+```
+
+```{r}
+# Replace "Türkiye" with "Turkey" in the vdem dataset
+vdem <- vdem %>%
+  mutate(country_name = if_else(country_name == "Türkiye", "Turkey", country_name))
+write.csv(vdem,"vdem_fixed_Turkey.csv")
+```
+
+```{r}
+# Step 1: Fix country name in vdem
+
+df1 <- read.csv("combined_fixed.csv")
+
+colnames(df1)
+vdem_fixed <- vdem %>%
+  mutate(country_name = ifelse(country_name == "Türkiye", "Turkey", country_name))
+
+# Step 2: Join combined with vdem_fixed using country and year
+combined_fixed <- df1 %>%
+  left_join(vdem_fixed %>% 
+              select(country_name, year, v2x_libdem, v2x_polyarchy),
+            by = c("country" = "country_name", "year" = "year")) 
+
+colnames(combined_fixed)
+combined_fixed <- combined_fixed %>%
+  select(-v2x_libdem.x,-v2x_polyarchy.x)
+
+missing_rows <- combined_fixed %>% 
+  filter(is.na(v2x_libdem.y) & is.na(v2x_polyarchy.y))
+unique(missing_rows$country)
+```
+
+
+```{r}
+library(dplyr)
+
+# Step 1: Fix "Türkiye" to "Turkey"
+vdem_fixed <- vdem %>%
+  mutate(country_name = ifelse(country_name == "Türkiye", "Turkey", country_name))
+
+# Step 2: Select and filter needed variables
+vdem_selected <- vdem_fixed %>%
+  filter(year >= 1971, year <= 2023) %>%
+  select(country_name, year, v2x_libdem, v2x_polyarchy)
+
+# Step 3: Extract Russia's democracy scores to use for Ukraine and Belarus
+russia_scores <- vdem_selected %>%
+  filter(country_name == "Russia") %>%
+  select(year, v2x_libdem_russia = v2x_libdem, v2x_polyarchy_russia = v2x_polyarchy)
+
+# Step 4: Join V-Dem to your combined dataset
+combined_joined <- combined %>%
+  left_join(vdem_selected, by = c("country" = "country_name", "year"))
+
+# Step 5: Add Russia’s values
+combined_joined <- combined_joined %>%
+  left_join(russia_scores, by = "year") %>%
+  mutate(
+    v2x_libdem.y = if_else(country %in% c("Ukraine", "Belarus") & is.na(v2x_libdem.y),
+                           v2x_libdem_russia, v2x_libdem.y),
+    v2x_polyarchy.y = if_else(country %in% c("Ukraine", "Belarus") & is.na(v2x_polyarchy.y),
+                              v2x_polyarchy_russia, v2x_polyarchy.y)
+  ) %>%
+  select(-v2x_libdem_russia, -v2x_polyarchy_russia)
+
+combined_joined
+```
+
+```{r}
+colnames(combined_joined)
+
+combined_joined2 <- combined_joined %>% 
+  mutate(v2x_libdem = coalesce(v2x_libdem.x, v2x_libdem.y), 
+         v2x_polyarchy = coalesce(v2x_polyarchy.x, v2x_polyarchy.y))
+
+missing_rows <- combined_joined2 %>% 
+  filter(is.na(v2x_libdem) & is.na(v2x_polyarchy))
+missing_names <- unique(missing_rows$country)
+```
+
+```{r}
+write.csv(combined_joined2, "combined_joined2.csv")
+```
+
+
+```{r}
+vdem <- read.csv('vdem_fixed_Turkey.csv')
+```
+
+
+```{r}
+head(vdem)
+```
+
+```{r}
+unique(vdem$country_name)
+```
+
+```{r}
+# Assuming these are your vectors:
+vdem_names <- unique(vdem$country_name)
+#missing_names <- c("Czechoslovakia", "Gambia", "Yemen Arab Republic", ...)  # Your full list
+
+# 1. See which of your missing names exist in the vdem country names
+matches <- missing_names[missing_names %in% vdem_names]
+
+# 2. See which of your missing names do NOT exist in vdem
+not_in_vdem <- missing_names[!missing_names %in% vdem_names]
+
+# 3. Optional: Print both for inspection
+cat("✅ Matches in V-Dem:\n")
+print(matches)
+
+cat("\n❌ Not found in V-Dem:\n")
+print(not_in_vdem)
+```
+
+```{r}
+# drop small islands and microstates
+library(dplyr)
+
+# Define a vector of small island nations and microstates you want to drop
+drop_countries <- c(
+  "Andorra", "Antigua & Barbuda", "Bahamas", "Barbados", "Belize",
+  "Brunei", "Dominica", "East Timor", "Federated States of Micronesia",
+  "Gambia", "Grenada", "Kiribati", "Liechtenstein", "Maldives",
+  "Marshall Islands", "Monaco", "Nauru", "Palau", "St. Kitts and Nevis",
+  "St. Lucia", "St. Vincent and the Grenadines", "Samoa", "San Marino",
+  "Swaziland", "Tonga", "Tuvalu","Czechoslovakia","Yugoslavia"
+)
+
+# Filter out these countries from your dataframe (e.g., `combined`)
+combined_cleaned <- combined_joined2 %>%
+  filter(!country %in% drop_countries)
+
+missing_rows <- combined_cleaned %>% 
+  filter(is.na(v2x_libdem) & is.na(v2x_polyarchy))
+missing_names <- unique(missing_rows$country)
+missing_names
+```
+
+```{r}
+
+combined_cleaned <- combined_cleaned %>%
+  mutate(
+    v2x_libdem = if_else(country == "Bosnia and Herzegovina" & is.na(v2x_libdem), 0.095, v2x_libdem),
+    v2x_polyarchy = if_else(country == "Bosnia and Herzegovina" & is.na(v2x_polyarchy), 0.249, v2x_polyarchy)
+  )
+  
+combined_cleaned <- combined_cleaned %>% 
+  select(-v2x_libdem.x,-v2x_polyarchy.x,-v2x_libdem.y,-v2x_polyarchy.y)
+
+nrow(combined_cleaned)
+ 
+combined_cleaned$country <- combined_cleaned$country %>%
+  recode(
+    "Czech Republic" = "Czechia",
+    "German Federal Republic" = "Germany",
+    "Yemen Arab Republic" = "Yemen",
+    "Yemen People's Republic" = "Yemen",
+    "Macedonia" = "North Macedonia",
+    "Myanmar" = "Burma/Myanmar"
+  )
+
+
+
+```
+
+```{r}
+library(dplyr)
+
+# Step 1: Rename historical countries to modern equivalents
+combined_cleaned <- combined_cleaned %>%
+  mutate(country = recode(country,
+    "German Federal Republic" = "Germany",
+    "Czech Republic" = "Czechia",
+    "Yemen Arab Republic" = "Yemen",
+    "Yemen People's Republic" = "Yemen",
+    "Macedonia" = "North Macedonia"
+  ))
+
+# Step 2: Remove fully defunct/historical countries (e.g., Czechoslovakia, Yugoslavia)
+drop_old_countries <- c(
+  "Czechoslovakia",
+  "Yugoslavia",
+  "German Federal Republic",
+  "Yemen Arab Republic",
+  "Yemen People's Republic"
+)
+
+# Step 3: Drop small island nations and microstates
+drop_microstates <- c(
+  "Andorra", "Antigua & Barbuda", "Bahamas", "Barbados", "Belize", "Brunei",
+  "Dominica", "East Timor", "Federated States of Micronesia", "Gambia", "Grenada",
+  "Kiribati", "Liechtenstein", "Maldives", "Marshall Islands", "Monaco", "Nauru",
+  "Palau", "St. Kitts and Nevis", "St. Lucia", "St. Vincent and the Grenadines",
+  "Samoa", "San Marino", "Swaziland", "Tonga", "Tuvalu"
+)
+
+# Step 4: Filter out both old countries and microstates
+combined_cleaned <- combined_cleaned %>%
+  filter(!country %in% c(drop_old_countries, drop_microstates))
+
+# Step 5: (Optional) View remaining countries
+print(sort(unique(combined_cleaned$country)))
+
+head(combined_cleaned)
+sum(is.na(combined_cleaned))
+
+combined_cleaned <- combined_cleaned[complete.cases(combined_cleaned),]
+
+write.csv(combined_cleaned,"most_final_combined_cleaned.csv")
+```
+
+
+```{r}
+df <- read.csv("most_final_combined_cleaned.csv")
+df <- df[,-1]
+head(df,50)
+
+df %>% 
+  filter(year == 2023)
+```
+
+Now add a new feature of whether a country conducts drills with China 
+```{r}
+military_drills <- read.csv('joint_drills.csv')
+
+military_drills <- military_drills %>% 
+  separate_rows(Partner_Country, sep = "–")
+
+
+military_drills <- military_drills %>% 
+  mutate(Year = Year -1)
+
+# create the 2019 dataset 
+library(dplyr)
+
+# Create 2019 drills data
+military_2019 <- tibble::tibble(
+  Year = 2019,
+  Partner_Country = c("Russia", "Pakistan", "Cambodia", "Laos"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2019)
+
+# (Optional) Sort the dataset by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+# deal with the 2018 dataset
+military_2018 <- tibble::tibble(
+  Year = 2018,
+  Partner_Country = c("Russia", "Pakistan", "Mongolia"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to the existing dataset
+military_drills <- bind_rows(military_drills, military_2018)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# deal with 2017 dataset
+# Create 2017 drills data
+military_2017 <- tibble::tibble(
+  Year = 2017,
+  Partner_Country = c("Russia", "Pakistan", "Tajikistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2017)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# deal with 2016 dataset
+military_2016 <- tibble::tibble(
+  Year = 2016,
+  Partner_Country = c("Russia", "Pakistan", "Tajikistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2016)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2015 drills data
+military_2015 <- tibble::tibble(
+  Year = 2015,
+  Partner_Country = c("Russia", "Pakistan", "Tajikistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2015)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2014 drills data
+military_2014 <- tibble::tibble(
+  Year = 2014,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2014)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2013 drills data
+military_2013 <- tibble::tibble(
+  Year = 2013,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2013)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+# Create 2012 drills data
+military_2012 <- tibble::tibble(
+  Year = 2012,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2012)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+## Create 2011 drills data
+military_2011 <- tibble::tibble(
+  Year = 2011,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2011)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2010 drills data
+military_2010 <- tibble::tibble(
+  Year = 2010,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2010)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+# Create 2009 drills data
+military_2009 <- tibble::tibble(
+  Year = 2009,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2009)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+
+# Create 2008 drills data
+military_2008 <- tibble::tibble(
+  Year = 2008,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2008)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2007 drills data
+military_2007 <- tibble::tibble(
+  Year = 2007,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2007)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2006 drills data
+military_2006 <- tibble::tibble(
+  Year = 2006,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2006)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+
+# Create 2005 drills data
+military_2005 <- tibble::tibble(
+  Year = 2005,
+  Partner_Country = c("Russia", "Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2005)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+# deal with 2004
+military_2004 <- tibble::tibble(
+  Year = 2004,
+  Partner_Country = c("Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2004)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2003 drills data
+military_2003 <- tibble::tibble(
+  Year = 2003,
+  Partner_Country = c("Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2003)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2002 drills data
+military_2002 <- tibble::tibble(
+  Year = 2002,
+  Partner_Country = c("Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2002)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+# Create 2001 drills data
+military_2001 <- tibble::tibble(
+  Year = 2001,
+  Partner_Country = c("Pakistan"),
+  Number_of_Joint_Exercises = 1
+)
+
+# Add to your existing dataset
+military_drills <- bind_rows(military_drills, military_2001)
+
+# Optional: sort by year
+military_drills <- military_drills %>%
+  arrange(Year)
+
+
+write.csv(military_drills,"China_military_drills.csv")
+```
+
+```{r}
+colnames(df)
+df <- df %>% 
+  left_join(military_drills, by = c("country" = "Partner_Country", "year" = "Year")) %>% 
+  rename(military_drills_China = Number_of_Joint_Exercises) %>% 
+  mutate(military_drills_China = if_else(is.na(military_drills_China), 0, military_drills_China))
+
+write.csv(df, "most_updated_data2.csv")
+```
+
+
+```{r}
+head(df)
+```
+
+
+First deal with all of the countries' exports to the US and China from 2012 to 2023
+```{r}
+# first get the raw data 
+# from the year 2012 to 2023
+export_2012_2023 <- read.csv("export_2012_to_2023.csv",row.names = NULL)
+head(export_2012_2023)
+
+# from the year 2000 to 2011
+export_2000_2011 <- read.csv("export_2000_to_2011.csv",row.names = NULL)
+head(export_2000_2011)
+
+# from the year 1988 to 1999
+export_1988_1999 <- read.csv("export_1988_to1999.csv",row.names = NULL)
+head(export_1988_1999)
+
+# combine all of the datasets together
+Total_exports_1988_2023 <- bind_rows(export_2012_2023,export_2000_2011,export_1988_1999)
+
+
+# now select the important features
+head(Total_exports_1988_2023)
+
+
+useful_features <- c("refPeriodId","reporterCode","reporterISO","flowCode","partnerISO","fobvalue")
+export_df <- Total_exports_1988_2023 %>% 
+  select(useful_features) %>% 
+  rename(year = refPeriodId,
+         source = reporterISO,
+         export_to = partnerISO,
+         export_value =fobvalue)
+
+
+export_df <- export_df %>% 
+  mutate(export_to = if_else(export_to == "China, Hong Kong SAR", "China", export_to))
+
+export_df <- export_df %>% 
+  pivot_wider(
+    names_from = export_to,
+    values_from = export_value, 
+    names_prefix = "export_to_" # put this in front of each value of export_to
+)
+
+
+export_df %>% 
+  mutate(export_to_China = if_else(is.na(export_to_China), 0,export_to_China),
+         export_to_USA = if_else(is.na(export_to_USA),0,export_to_USA)
+  )
+  
+export_df_test <- export_df %>% 
+  group_by(year, t)
+
+
+
+```
+
+These are each country's total export to the world
+```{r}
+world_2012_2023 <- read.csv("world_export_2012_2023.csv",row.names = NULL)
+head(world_2012_2023)
+
+world_2000_2011 <- read.csv("world_export_2000_2011.csv",row.names = NULL)
+head(world_2000_2011)
+
+world_1988_1999 <- read.csv("world_export_1988_1999.csv",row.names = NULL)
+head(world_1988_1999)
+
+Total_world_exports_1988_2023 <- bind_rows(world_1988_1999,world_2000_2011,world_2012_2023)
+
+nrow(Total_world_exports_1988_2023)
+nrow(Total_exports_1988_2023)
+
+nrow(world_2012_2023)
+nrow(export_2012_2023)
+
+
+head(Total_world_exports_1988_2023)
+useful_features <- c("refPeriodId","reporterCode","fobvalue")
+world_export_df <- Total_world_exports_1988_2023 %>% 
+  select(useful_features) %>% 
+  rename(
+    year = refPeriodId,
+    export_to_world = fobvalue
+  )
+
+
+
+export_df
+complete_export_df %>%
+  filter(year == 2023)
+
+world_export_df %>%
+  group_by(year, reporterCode) %>%
+  tally() %>%
+  filter(n > 1)
+
+world_export_df <- Total_world_exports_1988_2023 %>%
+  select(refPeriodId, reporterCode, fobvalue) %>%
+  group_by(refPeriodId, reporterCode) %>%
+  summarise(export_to_world = sum(fobvalue, na.rm = TRUE)) %>%
+  rename(
+    year = refPeriodId
+  )
+
+unique(world_export_df$year)
+
+
+head(world_export_df)
+
+complete_export_df <- export_df %>% 
+  left_join(world_export_df, by = c("year", "reporterCode"))
+
+missing_rows <- which(is.na(complete_export_df))
+
+complete_export_df2 <- complete_export_df[complete.cases(complete_export_df),]
+
+complete_export_df2 %>% 
+  filter(year == 2023)
+
+complete_export_df2 %>% 
+  filter (year == 2023) %>%
+  mutate(
+  export_dependency_China = paste0(round((export_to_China / export_to_world) * 100, 2), "%"),
+  export_dependency_USA = paste0(round((export_to_USA / export_to_world) * 100, 2), "%")
+) %>% 
+  arrange(desc(export_dependency_China))
+
+write.csv(complete_export_df2, "UN_total_export_data.csv")
+  
+export_df <- read.csv("UN_total_export_data.csv")
+export_df <- export_df[,-1]
+head(export_df)
+
+
+export_df <- export_df %>% 
+  mutate(export_dependence_China = export_to_China/ export_to_world) %>% 
+  mutate(export_dependence_USA = export_to_USA/ export_to_world)
+
+write.csv(export_df, "UN_total_export_data2.csv")
+
+export_df %>% 
+  filter(year == 2023) %>% 
+  arrange(desc(export_dependence_USA))
+```
+
+Now deal with the imports
+
+```{r}
+import_df <- read.csv("Combined_Import_Data.csv")
+head(import_df)
+```
+
+```{r}
+target_colnames <- c("refPeriodId", "reporterCode", "reporterISO","flowCode","partnerISO", "fobvalue")
+import_df <- import_df %>% 
+  select(target_colnames)
+
+import_test <- import_df %>%
+  mutate(fobvalue = map_dbl(fobvalue, ~ .x)) %>% 
+  pivot_wider(
+    names_from = partnerISO,
+    values_from = fobvalue, 
+    names_prefix = "import_from_" # put this in front of each value of export_to
+  )
+
+unlist(import_test$import_from_World)[20]
+
+
+
+import_df %>%
+  count(partnerISO, sort = TRUE)
+```
+```{r}
+import_df %>%
+  count(refPeriodId, reporterISO, partnerISO,fobvalue) %>%
+  filter(n > 1)
+
+import_df %>% 
+  filter(refPeriodId == 2012, reporterISO == "Afghanistan", partnerISO == "World")
+```
+
+```{r}
+import_df %>%
+  group_by(refPeriodId, reporterISO, partnerISO) %>%
+  summarise(
+    n = n(),
+    unique_fobvalues = n_distinct(fobvalue),
+    .groups = "drop"
+  ) %>%
+  filter(n > 1, unique_fobvalues > 1)
+```
+
+```{r}
+import_df2<- import_df %>%
+  distinct(refPeriodId, reporterISO, partnerISO, .keep_all = TRUE)
+
+import_df2 <- import_df2 %>% 
+  mutate(target = if_else(target== "China, Hong Kong SAR", "China",target))
+
+head(import_df2)
+import_df2 <- import_df2 %>% 
+  pivot_wider(
+    names_from = target, 
+    values_from = import_value,
+    names_prefix = "import_from_"
+  )
+
+import_df2 <- import_df2 %>% 
+  mutate(import_dependency_China = import_from_China/import_from_World,
+         import_dependency_USA = import_from_USA/import_from_World)
+import_df2 %>% 
+  filter(year == 2023) %>%
+  arrange(desc(import_dependency_China))
+
+import_df3 <- import_df2 %>%
+  mutate(across(c(import_from_China, import_from_USA, import_dependency_China,import_dependency_USA), ~replace_na(.x, 0)))
+
+write.csv(import_df3, "UN_total_import_data2.csv")
+```
+
+
+```{r}
+export_df
+import_df3
+
+colnames(export_df)
+total_test <- export_df %>% 
+  inner_join(import_df3, by = c("year", "source"))
+
+deleted_features <- c("flowCode.x", "export_to_world","reporterCode.y","flowCode.y","import_from_World")
+total_test <- total_test %>%
+  select(-any_of(deleted_features)) 
+total_test <- total_test %>% 
+  rename(source_code = reporterCode.x)
+
+write.csv(total_test, "UN_Export_Import.csv")
+
+
+total_df <- read.csv("most_updated_data2.csv")
+total_df <- total_df[,-1]
+
+total_df2 <- total_df %>% 
+  filter(year >= 1988)
+try <- total_df2 %>% 
+  left_join(total_test, by = c("year","StateAbb.x" = "source_code"))
+
+unique(total_test$source_code)
+
+total_test %>%
+  filter(year == 1994, source == "Yemen")
+
+
+```
+
+
+```{r}
+unique(total_test$source_code)
+unique(total_df2$StateAbb.x)
+
+library(countrycode)
+total_df3 <- total_df2 %>%
+  mutate(country_iso3 = countrycode(StateAbb.x, origin = "country.name", destination = "iso3c"))
+
+
+unique(total_df2$country)
+country_codes_df <- read.csv("Country_ISO_Mapping.csv")
+
+total_df3 <- total_df2 %>% 
+  left_join(country_codes_df, by = c("country" = "country_name"))
+
+
+
+total_df3 <- total_df3 %>% 
+  filter(year >= 1989)
+
+total_df3 %>% 
+  left_join(total_test, by = c("year", "iso3_code" = "source_code"))
+
+total_test <- total_test %>% 
+  left_join(country_codes_df, by = c("source" = "country_name"))
+
+
+
+total_df3
+
+everything <- total_df3 %>% 
+  left_join(total_test,by = c("year", "country" = "source")) %>% 
+  filter(year == 2022)
+
+total_test %>% 
+  filter(source == "Congo")
+
+unique(total_df3$country)
+unique(total_test$source)
+
+length(unique(total_df3$country))
+length(unique(total_test$source))
+
+
+official_names <- read.csv("official_names.csv")
+
+official_countries_names <- official_names$country
+total_df_country_names <- total_df$country
+
+
+
+```
+
+
+Deal with the mis-matched country names for the import-export dataset 
+```{r}
+library(stringdist)
+
+# decide to change the names of vec1, which is the original country names
+vec1 <- unique(total_test3$source)
+vec2 <- official_countries_names
+df1 <- data.frame(country =vec1)
+df2 <- data.frame(country_clean = vec2)
+
+
+library(fuzzyjoin)
+# Use string distance join (Levenshtein distance)
+joined_df <- stringdist_left_join(df1, df2, 
+                                  by = c("country" = "country_clean"),
+                                  method = "jw",  # Jaro-Winkler is good for names
+                                  max_dist = 0.3,  # adjust for strictness
+                                  distance_col = "dist")
+
+cleaned_df <- joined_df %>%
+  group_by(country) %>%
+  slice_min(order_by = dist, n = 1, with_ties = FALSE) %>%
+  ungroup()
+  
+
+total_test2 <- total_test %>%
+  mutate(column_name = case_when(
+    column_name == "OldValue1" ~ "NewValue1",
+    column_name == "OldValue2" ~ "NewValue2",
+    TRUE ~ column_name  # keep original if no match
+  ))
+
+total_test3 <- total_test3 %>% 
+  filter(! (source%in% c("Belgium-Luxembourg (...1998)","Fed. Rep. of Germany (...1990)","Other Asia, nes","Serbia and Montenegro (...2005)",
+                         "Southern African Customs Union (...1999)","Sudan (...2011)","China, Macao SAR")))
+
+
+total_test3 <- total_test3 %>% 
+  mutate(source = case_when(
+    source == "Bolivia (Plurinational State of)" ~ "Bolivia",
+    source == "Brunei Darussalam" ~ "Brunei",
+    source == "Czechia" ~"Czech",
+    source == "Dem. Rep. of the Congo" ~"DR Congo",
+    source == "Lao People's Dem. Rep." ~"Laos",
+    source == "Martinique (Overseas France)" ~"Martinique",
+    source == "Rep. of Korea" ~ "South Korea",
+    source == "Rep. of Moldova" ~ "Moldova",
+    source == "Russian Federation" ~ "Russia",
+    source == "State of Palestine" ~ "Palestine",
+    source == "United Rep. of Tanzania" ~ "Tanzania",
+    source == "Congo" ~ "Republic of Congo",
+    TRUE ~ source  # keep original if no match
+  ))
+
+
+df2$country_clean[c(56,169)]
+
+indices <- grep("Congo", df2$country_clean)
+print(indices)
+
+
+cleaned_df2 <- cleaned_df %>% 
+  select(country, country_clean)
+import_export_total <- total_test3
+import_export_total <- import_export_total %>% 
+  left_join(cleaned_df2, by = c("source" = "country")) %>% 
+  select(-any_of(c('source_code','iso3_code')))
+
+import_export_total <- import_export_total %>%
+  select(1, last_col(), 2:(ncol(.) - 1))
+
+write.csv(import_export_total, "latest_import_export.csv")
+```
+
+
+Now Deal with the mismatch countries' names of the original combined dataframe
+```{r}
+total_df3 <- read.csv("most_updated_data2.csv")
+total_df3 <- total_df3[,-1]
+# decide to change the names of vec1, which is the original country names
+vec1 <- unique(total_df4$country)
+vec2 <- official_countries_names
+df1 <- data.frame(country =vec1)
+df2 <- data.frame(country_clean = vec2)
+
+library(fuzzyjoin)
+# Use string distance join (Levenshtein distance)
+joined_df <- stringdist_left_join(df1, df2, 
+                                  by = c("country" = "country_clean"),
+                                  method = "jw",  # Jaro-Winkler is good for names
+                                  max_dist = 0.3,  # adjust for strictness
+                                  distance_col = "dist")
+
+cleaned_df <- joined_df %>%
+  group_by(country) %>%
+  slice_min(order_by = dist, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# Do some changes of country name 
+# first delete some rows
+total_df4 <- total_df3 %>% 
+  mutate(country =case_when(
+    country == "Democratic Republic of the Congo" ~"DR Congo",
+    TRUE ~ country
+  ))
+total_df4 <- total_df4 %>% 
+  filter(country != "German Democratic Republic")
+
+total_df4 <- total_df4 %>% 
+  left_join(cleaned_df, by = "country")
+total_df4 <- total_df4[,-ncol(total_df4)]
+
+total_df4 <- total_df4 %>%
+  select(1, last_col(), 2:(ncol(.) - 1))
+
+year2023 <- total_df4 %>% 
+  left_join(import_export_total, by = c("year","country_clean")) %>%
+  filter(year ==2023)
+
+missing_rows <- which(!complete.cases(year2023))
+year2023[missing_rows,]
+
+write.csv(total_df4,"most_updated_total_df_new.csv")
+```
+
+
+Re-do all of countries.
+```{r}
+trade1_df <- read.csv("1988_1999.csv",row.names = NULL)
+trade2_df <- read.csv("2000_2011.csv",row.names = NULL)
+trade3_df <- read.csv("2012_2023.csv",row.names = NULL)
+
+trade_df <- rbind(trade1_df, trade2_df, trade3_df)
+
+
+selected_features <- c("refPeriodId","reporterISO","flowCode", "partnerISO","fobvalue")
+trade_df <- trade_df[,selected_features]
+
+trade_df <- trade_df %>%
+  rename(year = refPeriodId,
+         country = reporterISO,
+         flow = flowCode,
+         target = partnerISO,
+         value = fobvalue)
+
+
+trade_df_wide <- trade_df %>%
+  mutate(flow_target = paste(flow, target, sep = "_")) %>%
+  group_by(year, country, flow_target) %>%
+  summarise(value = sum(value, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(
+    names_from = flow_target,
+    values_from = value
+  ) 
+
+# Replace NA with 0 only in columns with names containing "Import" or "Export"
+trade_df_wide<- trade_df_wide %>%
+  mutate(across(
+    .cols = contains(c("Import", "Export")),
+    .fns = ~replace_na(., 0)
+  ))
+
+# calculate export and import dependencies for both China and the US
+trade_df_wide <- trade_df_wide %>% 
+  mutate(export_China_dependency = Export_China/ Export_World, 
+         export_USA_dependency = Export_USA/ Export_World,
+         import_China_dependency = Import_China/Import_World,
+         import_USA_dependency = Import_USA/Import_World) 
+trade_df_wide[is.na(trade_df_wide)] = 0
+
+# now deal with the country name 
+
+# 1. First get a dictionary dataframe
+# decide to change the names of vec1, which is the original country names
+vec1 <- unique(trade_df_wide$country)
+vec2 <- official_countries_names
+df1 <- data.frame(country =vec1)
+df2 <- data.frame(country_clean = vec2)
+
+
+library(fuzzyjoin)
+# Use string distance join (Levenshtein distance)
+joined_df <- stringdist_left_join(df1, df2, 
+                                  by = c("country" = "country_clean"),
+                                  method = "jw",  # Jaro-Winkler is good for names
+                                  max_dist = 0.3,  # adjust for strictness
+                                  distance_col = "dist")
+
+cleaned_df <- joined_df %>%
+  group_by(country) %>%
+  slice_min(order_by = dist, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+
+```
+
+```{r}
+# change country names
+trade_df_wide2 <- trade_df_wide %>% 
+  mutate(country = case_when(
+    country == "Bolivia (Plurinational State of)" ~ "Bolivia",
+    country == "Brunei Darussalam" ~ "Brunei",
+    country == "Czechia" ~"Czech",
+    country == "Dem. Rep. of the Congo" ~"DR Congo",
+    country == "Lao People's Dem. Rep." ~"Laos",
+    country == "Martinique (Overseas France)" ~"Martinique",
+    country == "Rep. of Korea" ~ "South Korea",
+    country == "Rep. of Moldova" ~ "Moldova",
+    country == "Russian Federation" ~ "Russia",
+    country == "State of Palestine" ~ "Palestine",
+    country == "United Rep. of Tanzania" ~ "Tanzania",
+    country == "Congo" ~ "Republic of Congo",
+    country == "Fed. Rep. of Germany (...1990)" ~"Germany",
+    country == "C\xf4te d'Ivoire" ~ "Ivory Coast",
+    country == "Sudan (...2011)" ~ "Sudan",
+    country == "Netherlands Antilles (...2010)" ~ "Netherlands Antilles (...2010)",
+    country == "Cura\xe7ao" ~ "Curacao",
+    country == "T\xfcrkiye" ~ "Turkey",
+    country == "USA" ~ "United States",
+    country == "Belgium-Luxembourg (...1998)" ~ "Belgium",
+    country == "R\xe9union (Overseas France)" ~ "Reunion",
+    TRUE ~ country  # keep original if no match
+  ))
+
+# delete certain countries
+trade_df_wide2<- trade_df_wide2 %>% 
+  filter(! (country%in% c(
+    "China, Macao SAR",
+    "Southern African Customs Union (...1999)",
+    "China, Hong Kong SAR",
+    "Other Asia, nes"
+  )))
+
+
+unique(trade_df_wide2$country)
+
+
+# add the country_clean column for further combination 
+# 1. First get a dictionary dataframe
+# decide to change the names of vec1, which is the original country names
+vec1 <- unique(trade_df_wide2$country)
+vec2 <- official_countries_names
+df1 <- data.frame(country =vec1)
+df2 <- data.frame(country_clean = vec2)
+
+
+library(fuzzyjoin)
+# Use string distance join (Levenshtein distance)
+joined_df <- stringdist_left_join(df1, df2, 
+                                  by = c("country" = "country_clean"),
+                                  method = "jw",  # Jaro-Winkler is good for names
+                                  max_dist = 0.3,  # adjust for strictness
+                                  distance_col = "dist")
+
+cleaned_df <- joined_df %>%
+  group_by(country) %>%
+  slice_min(order_by = dist, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+
+trade_df_wide3 <- trade_df_wide2 %>% 
+  left_join(cleaned_df, by = "country")
+
+trade_df_wide4 <- trade_df_wide3[,-ncol(trade_df_wide3)]
+trade_df_wide5 <- trade_df_wide4 %>%
+  relocate(ncol(.), .after = 1)
+
+write.csv(trade_df_wide5, 'most_updated_trade_total.csv')
+```
+
+```{r}
+total <- total_df4
+trade <- trade_df_wide5
+
+joined_df3 <- total %>% 
+  left_join(trade, by = c("year", "country_clean")) %>% 
+  filter(year >= 2000)
+```
+
+
+
+
+```{r}
+cols <- c("country.x","StateAbb.x","country.y")
+joined_df3 <- joined_df3 %>% 
+  select(-any_of(cols))
+
+write.csv(joined_df3, "total_plus_trade.csv")
+
+joined_df3 %>% 
+  filter(country_clean == "North Korea")
+
+```
+
+
+
+
+
+
+Separete the groups into three different categories. 
+1) All of rows missing 
+2) More than half of the rows missing 
+3) Less than half of the rows missing
+
+
+
+```{r}
+rows_with_na <- joined_df3 %>%
+  filter(if_any(contains("Import"), is.na) | if_any(contains("Export"), is.na))
+
+unique(rows_with_na$country_clean)
+```
+
+```{r}
+# Vector of countries that lack data (based on your image)
+missing_countries <- c(
+  "Haiti", "Chad", "Eritrea", "Yemen", "Bhutan", "Sierra Leone", "Guinea-Bissau", 
+  "Liberia", "Papua New Guinea", "Honduras", "South Sudan", "Sri Lanka", "Belarus", 
+  "Dominican Republic", "DR Congo", "Angola", "Afghanistan", "Pakistan", "Turkmenistan", 
+  "Somalia", "Nigeria", "Togo", "Mongolia", "Venezuela", "Sudan", "Cameroon", 
+  "Bosnia and Herzegovina", "Rwanda", "Libya", "Uzbekistan", "Laos", "Nepal", 
+  "Tajikistan", "Iraq", "Cuba", "Mali", "Bangladesh", "Ghana", "Comoros", 
+  "Equatorial Guinea", "Djibouti", "Syria", "North Korea", "Solomon Islands", 
+  "Vanuatu", "Guinea", "Kuwait", "Iran", "Kenya", "Algeria", "Russia", "Burundi"
+)
+
+# Replace `your_data` with your actual dataset name
+# Let's assume your dataset has a `country` column and columns like `import` or `export`
+missing_counts <- joined_df3 %>%
+  filter(country_clean %in% missing_countries) %>%
+  group_by(country_clean) %>%
+  summarise(missing_rows = sum(if_any(everything(), is.na))) %>%
+  arrange(desc(missing_rows))
+
+# View the number of missing rows per country
+print(missing_counts)
+```
+
+```{r}
+joined_df3 %>% 
+  filter(country_clean == "Iran")
+
+joined_df3 %>% 
+  filter(country_clean == "United States")
+```
+
+
+
+
+
+#############################################
+Notice that right now I will use data from 2000 to 2023 to only model the most modern country situation. 
+```{r}
+write.csv(joined_df3, "latest_useful_total.csv")
+```
+
+Change the dependency values to 1 for both China and USA 
+```{r}
+joined_df3 <- read.csv("latest_useful_total.csv")
+joined_df3 %>% 
+  filter(country_clean %in% c("China", "United States")) 
+
+joined_df4 <- joined_df3 %>%
+  mutate(
+    export_China_dependency = case_when(
+      country_clean == "China" ~ 1,
+      TRUE ~ export_China_dependency
+    ),
+    export_USA_dependency = case_when(
+      country_clean == "United States" ~ 1,
+      TRUE ~ export_USA_dependency
+    ),
+    import_China_dependency = case_when(
+      country_clean == "China" ~ 1,
+      TRUE ~ import_China_dependency
+    ),
+    import_USA_dependency = case_when(
+      country_clean == "United States" ~ 1,
+      TRUE ~ import_USA_dependency
+    )
+  )
+
+joined_df4 %>% 
+  filter(country_clean %in% c("China","United States"))
+```
+
+
+Use joined_df4
+
+1) fix the China_Ideal_Distance, USA_Ideal_Distance, 
+2) Incoporate the gdp per capital for each country
+3) Get the clean version of the dataset 
+4) Potentially get the economic sanctions? 
+4) Wrap up everything in R
+5) Use Transformer or deep learning method to fill in the Values of the dependency for China and dependency for USA. 
+6) Do clustering
+
+
+1) Add IdeapointDistance with China and USA 
+```{r}
+china_usa_points <- joined_df4 %>% 
+  filter(country_clean %in% c("China", "United States")) %>% 
+  select(country_clean, year, IdealPointAll.x) %>% 
+  pivot_wider(
+    names_from = country_clean, 
+    values_from = IdealPointAll.x
+  )  %>% 
+  rename (
+    IdealPoints_USA = 'United States',
+    IdealPoints_China = China
+  )
+
+
+joined_df5 <- joined_df4 %>%
+  left_join(china_usa_points, by = "year") %>% 
+  mutate(
+    IdealPointsDistance_USA = abs(IdealPointAll.x - IdealPoints_USA),
+    IdealPointsDistance_China = abs(IdealPointAll.x - IdealPoints_China)
+  )
+joined_df5 <- joined_df5[,-1]
+
+joined_df5 %>% 
+  filter(year == 2023) %>% 
+  arrange(IdealPointsDistance_China) %>% 
+  select(country_clean, IdealPointsDistance_China) 
+
+colnames(joined_df5)
+joined_df5 %>%
+  filter(year == 2023) %>% 
+  arrange(v2x_libdem) %>% 
+  select(country_clean, v2x_libdem)
+
+write.csv(joined_df5,"All_df_backup.csv")
+
+
+joined_df6 <- joined_df5 %>%
+  select(-all_of(c("IdealPoints_USA",
+                   "IdealPoints_China",
+                   "IdealPointAll.x",
+                   "Export_China",
+                   "Export_USA",
+                   "Export_World",
+                   "Import_China",
+                   "Import_USA",
+                   "Import_World")))
+```
+
+2) Now add the gdp per capita
+```{r}
+gdp <- read.csv("gdp_per_capita.csv")
+gdp <- gdp %>% 
+  rename(country = Country.Name)
+
+
+official_names <- read.csv("official_names.csv")
+official_countries_names <- official_names$country
+unique(gdp$Country.Name)
+
+
+gdp <- gdp %>% 
+  mutate(country = case_when(
+    country == "Bolivia (Plurinational State of)" ~ "Bolivia",
+    country == "Brunei Darussalam" ~ "Brunei",
+    country == "Czechia" ~"Czech Republic",
+    country == "Democratic Republic of the Congo" ~"DR Congo",
+    country == "Lao People's Dem. Rep." ~"Laos",
+    country == "Martinique (Overseas France)" ~"Martinique",
+    country == "Rep. of Korea" ~ "South Korea",
+    country == "Rep. of Moldova" ~ "Moldova",
+    country == "Russian Federation" ~ "Russia",
+    country == "State of Palestine" ~ "Palestine",
+    country == "United Rep. of Tanzania" ~ "Tanzania",
+    country == "Congo" ~ "Republic of Congo",
+    country == "Fed. Rep. of Germany (...1990)" ~"Germany",
+    country == "C\xf4te d'Ivoire" ~ "Ivory Coast",
+    country == "Sudan (...2011)" ~ "Sudan",
+    country == "Netherlands Antilles (...2010)" ~ "Netherlands Antilles (...2010)",
+    country == "Cura\xe7ao" ~ "Curacao",
+    country == "T\xfcrkiye" ~ "Turkey",
+    country == "USA" ~ "United States",
+    country == "Belgium-Luxembourg (...1998)" ~ "Belgium",
+    country == "R\xe9union (Overseas France)" ~ "Reunion",
+    country == "Kyrgyz Republic" ~ "Kyrgyzstan",
+    country == "Gaza" ~ "Palestine",
+    TRUE ~ country  # keep original if no match
+  ))
+
+gdp<- gdp %>% 
+  filter(! (country%in% c(
+    "South Asia"
+  )))
+
+# decide to change the names of vec1, which is the original country names
+vec1 <- unique(gdp$country)
+vec2 <- official_countries_names
+df1 <- data.frame(country =vec1)
+df2 <- data.frame(country_clean = vec2)
+
+
+library(fuzzyjoin)
+# Use string distance join (Levenshtein distance)
+joined_df <- stringdist_left_join(df1, df2, 
+                                  by = c("country" = "country_clean"),
+                                  method = "jw",  # Jaro-Winkler is good for names
+                                  max_dist = 0.3,  # adjust for strictness
+                                  distance_col = "dist")
+
+cleaned_df <- joined_df %>%
+  group_by(country) %>%
+  slice_min(order_by = dist, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+
+cleaned_df <- cleaned_df[complete.cases(cleaned_df),]
+
+gdp_selected <- gdp %>%
+  left_join(cleaned_df, by = "country") %>% 
+  select(Year,GDP_per_capita,country_clean) %>% 
+  filter(complete.cases(.)) 
+
+gdp_selected <- gdp_selected %>% 
+  rename(
+    year = Year
+  )
+
+gdp_selected %>% 
+  filter(country_clean == "Cuba")
+
+joined_df7 <- joined_df6 %>% 
+  left_join(gdp_selected, by = c("year", "country_clean")) 
+
+joined_df7 %>%
+  filter(year == 2023)
+
+```
+
+```{r}
+# deal with Venezuela 
+missing_gdp <- joined_df12 %>%
+  filter(is.na(GDP_per_capita ))
+missing_gdp
+
+
+```
+
+Deal with 
+```{r}
+# Create the North Korea GDP per capita data frame
+joined_df8 <- joined_df7 %>%
+  mutate(GDP_per_capita = case_when(
+    country_clean == "North Korea" & year == 2000 ~ 462,
+    country_clean == "North Korea" & year == 2001 ~ 476,
+    country_clean == "North Korea" & year == 2002 ~ 468,
+    country_clean == "North Korea" & year == 2003 ~ 471,
+    country_clean == "North Korea" & year == 2004 ~ 473,
+    country_clean == "North Korea" & year == 2005 ~ 549,
+    country_clean == "North Korea" & year == 2006 ~ 577,
+    country_clean == "North Korea" & year == 2007 ~ 599,
+    country_clean == "North Korea" & year == 2008 ~ 553,
+    country_clean == "North Korea" & year == 2009 ~ 497,
+    country_clean == "North Korea" & year == 2010 ~ 573,
+    country_clean == "North Korea" & year == 2011 ~ 642,
+    country_clean == "North Korea" & year == 2012 ~ 1010,
+    country_clean == "North Korea" & year == 2013 ~ 1040,
+    country_clean == "North Korea" & year == 2014 ~ 1050,
+    country_clean == "North Korea" & year == 2015 ~ 1060,
+    country_clean == "North Korea" & year == 2016 ~ 1060,
+    country_clean == "North Korea" & year == 2017 ~ 1120,
+    country_clean == "North Korea" & year == 2018 ~ 1120,
+    country_clean == "North Korea" & year == 2019 ~ 1090,
+    country_clean == "North Korea" & year == 2020 ~ 1070,
+    country_clean == "North Korea" & year == 2021 ~ 1050,
+    country_clean == "North Korea" & year == 2022 ~ 1090,
+    country_clean == "North Korea" & year == 2023 ~ 1220,
+    TRUE ~ GDP_per_capita  # keep existing values for other rows
+  ))
+
+missing_gdp %>% 
+  filter(country_clean == "Eritrea")
+```
+
+```{r}
+eritrea_gdp <- tibble(
+  year = 2012:2023,
+  country_clean = "Eritrea",
+  GDP_value = c(694, 597, 787, 603, 655, 558, 581, 567, 596, 614, 651, 715)
+)
+joined_df9 <- joined_df8 %>%
+  left_join(eritrea_gdp, by = c("country_clean", "year")) %>%
+  mutate(GDP_per_capita = coalesce(GDP_per_capita, GDP_value)) %>%
+  select(-GDP_value)  # Clean up helper column
+
+
+library(dplyr)
+
+# Create a lookup table for Venezuela GDP per capita
+venezuela_gdp <- tibble(
+  year = 2015:2021,
+  country_clean = "Venezuela",
+  GDP_per_capita = c(11240, 9355, 8083, 6815, 5158, 3722, 3960)
+)
+
+# If your dataset "df" already has those rows, this code updates NA values only:
+joined_df10 <- joined_df9 %>%
+  left_join(venezuela_gdp, by = c("country_clean", "year")) %>%
+  mutate(GDP_per_capita = coalesce(GDP_per_capita.x, GDP_per_capita.y)) %>%
+  select(-GDP_per_capita.x, -GDP_per_capita.y)
+```
+
+```{r}
+joined_df10 %>% 
+  filter(country_clean == "Venezuela")
+```
+
+```{r}
+# 1. Create a lookup table
+ss_gdp <- tibble(
+  country_clean = "South Sudan",
+  year = 2016:2023,
+  GDP_per_capita_ss = c(303, 348, 375, 412, 393, 395, 395, 403)
+)
+
+# 2. Merge and replace NAs only
+joined_df11 <- joined_df10 %>%
+  left_join(ss_gdp, by = c("country_clean", "year")) %>%
+  mutate(GDP_per_capita = coalesce(GDP_per_capita, GDP_per_capita_ss)) %>%
+  select(-GDP_per_capita_ss)
+```
+
+```{r}
+# 1. Create lookup tables
+cuba_gdp <- tibble(
+  country_clean = "Cuba",
+  year = 2021:2023,
+  GDP_fill = c(11391, 13302, 18329)
+)
+
+ethiopia_gdp <- tibble(
+  country_clean = "Ethiopia",
+  year = 2023,
+  GDP_fill = 1272
+)
+
+# 2. Combine lookups
+lookup_gdp <- bind_rows(cuba_gdp, ethiopia_gdp)
+
+# 3. Merge and fill missing values
+joined_df12 <- joined_df11%>%
+  left_join(lookup_gdp, by = c("country_clean", "year")) %>%
+  mutate(
+    GDP_per_capita = coalesce(GDP_per_capita, GDP_fill)
+  ) %>%
+  select(-GDP_fill)
+
+
+joined_df12 %>% 
+  filter(year == 2023) %>% 
+  arrange(desc(GDP_per_capita)) %>% 
+  select(country_clean, GDP_per_capita)
+
+joined_df12 %>% 
+  filter(country_clean == "South Africa")
+
+cleaned_df %>% 
+  filter(country_clean == "South Africa")
+
+
+
+
+df_cleaned <- joined_df12 %>%
+  group_by(country_clean, year) %>%
+  mutate(row_num = row_number()) %>%
+  filter(!(country_clean == "South Africa" & row_num < n())) %>%
+  ungroup() %>%
+  select(-row_num)
+
+df_cleaned %>% 
+  filter(country_clean == "South Africa")
+
+table(df_cleaned$country_clean)
+
+df_cleaned %>%
+  filter(country_clean == "Finland")
+
+joined_df13 <- df_cleaned
+
+cleaned_df %>% 
+  filter(country_clean == "Finland")
+
+rows <- joined_df13 %>% 
+  filter(country_clean == "Finland") %>% 
+  filter(year >= 2002) %>% 
+  select(GDP_per_capita)
+
+as.vector(rows)
+```
+
+Deal with Finland 
+```{r}
+library(dplyr)
+
+finland_cleaned <- joined_df13 %>%
+  filter(country_clean == "Finland", year >= 2002, year <= 2022) %>%
+  group_by(year) %>%
+  slice(2) %>%  # keep the second row for each year
+  ungroup()
+```
+
+```{r}
+joined_df14 <- joined_df13 %>%
+  filter(!(country_clean == "Finland" & year >= 2002 & year <= 2022)) %>%
+  bind_rows(finland_cleaned)
+
+(table(joined_df14$country_clean) > 24)
+
+joined_df14 %>% 
+  filter(country_clean == "Niger")
+
+
+table_counts <- table(joined_df14$country_clean)
+countries_over_24 <- names(table_counts[table_counts > 24])
+
+joined_df14 %>% 
+  filter(country_clean == "Netherlands") %>% 
+  filter(year %in% 2005:2008)
+
+
+# Step 1: Filter Netherlands rows from 2005 to 2008 and keep even rows
+netherlands_filtered <- joined_df14 %>%
+  filter(country_clean == "Netherlands", year >= 2005, year <= 2008) %>%
+  mutate(row_id = row_number()) %>%
+  filter(row_id %% 2 == 0) %>%
+  select(-row_id)
+
+# Step 2: Remove all Netherlands rows from 2005 to 2008 from the original dataset
+joined_df14_updated <- joined_df14 %>%
+  filter(!(country_clean == "Netherlands" & year >= 2005 & year <= 2008))
+
+# Step 3: Add the filtered rows back
+joined_df14_final <- bind_rows(joined_df14_updated, netherlands_filtered)
+
+joined_df14_final %>% 
+  filter(country_clean == "Netherlands")
+
+cleaned_df%>% 
+  filter(country_clean == "Netherlands")
+
+joined_df14_final %>% 
+  filter(country_clean == "the")
+
+joined_df14 %>% 
+  filter(country_clean == "Netherlands")
+
+```
+
+```{r}
+library(dplyr)
+
+# Step 1: Re-filter the original data to get odd rows only
+netherlands_fixed <- joined_df14 %>%
+  filter(country_clean == "Netherlands", year >= 2005, year <= 2008) %>%
+  mutate(row_id = row_number()) %>%
+  filter(row_id %% 2 == 1) %>%  # keep only odd-numbered rows
+  select(-row_id)
+
+# Step 2: Remove all old Netherlands rows for 2005–2008
+joined_df14_updated <- joined_df14 %>%
+  filter(!(country_clean == "Netherlands" & year >= 2005 & year <= 2008))
+
+# Step 3: Add back the corrected (odd-numbered) rows
+joined_df14_final <- bind_rows(joined_df14_updated, netherlands_fixed)
+
+joined_df14_final %>% 
+  filter(country_clean == "Netherlands")
+```
+
+```{r}
+table_counts <- table(joined_df14_final$country_clean)
+
+joined_df14_final %>% 
+  filter(country_clean == "Malta")
+```
+
+
+```{r}
+cleaned_rows <- joined_df14 %>%
+  filter(country_clean == "Malta", year >= 2000, year <= 2023) %>%
+  mutate(row_id = row_number()) %>%
+  filter(row_id %% 2 == 1) %>%  # Keep odd-numbered rows
+  select(-row_id)
+
+# Step 2: Remove all Malta rows for that year range from the original dataset
+joined_df14_updated <- joined_df14 %>%
+  filter(!(country_clean == "Malta" & year >= 2000 & year <= 2023))
+
+# Step 3: Combine the cleaned odd-numbered rows back
+joined_df14_final <- bind_rows(joined_df14_updated, cleaned_rows)
+
+joined_df14_final %>% 
+  filter(country_clean== "Malta")
+```
+
+```{r}
+write.csv(joined_df14_final, "final_final_final_total.csv")
+```
+
+
+Try to manually fill in certain values
+```{r}
+df <- read.csv("final_final_final_total.csv")
+df <- df[,-1]
+df
+```
+```{r}
+df %>% 
+  filter(is.na(export_China_dependency))
+```
+
+## Now create a new dataset by filling all of the corresponding missing_values 
+```{r}
+install.packages("xgboost")
+```
+```{r}
+library(xgboost)
+library(dplyr)
+# first deal with export_dependency China
+
+# import the features 
+features <- c("year","agree_China","agree_China",
+              "Military_Imports_USA","military_drills_China",
+              "US_military_aid","v2x_libdem","v2x_polyarchy",
+              "military_drills_China","IdealPointsDistance_USA","IdealPointsDistance_China",
+              "GDP_per_capita")
+
+# separete the dataset with 
+df_no_na <- df %>% filter(!is.na(export_China_dependency))
+df_na <- df %>% filter(is.na(export_China_dependency))
+
+# Separate the df_no_na into 0.8:0.2 ratio training set and validation set 
+set.seed(5010)
+n <- nrow(df_no_na)
+train_indices <- sample(1:n, size = 0.8 * n)
+
+df_train <- df_no_na[train_indices,]
+df_valid <- df_no_na[-train_indices,]
+
+## Train the GXboost model
+# prepare the training X and training y
+X_train <- model.matrix(~ . -1, data = df_train[, features])
+y_train <- df_train$export_China_dependency
+
+# prepare the validation X and validation y 
+X_valid <- model.matrix(~ . -1, data = df_valid[, features])
+y_valid <- df_valid$export_China_dependency
+
+# Train the XGboost Model
+# Convert to DMatrix
+dtrain <- xgb.DMatrix(data = X_train, label = y_train)
+# Train with best params
+# Notice that this step is used to 
+final_model <- xgboost(
+  data = dtrain,
+  objective = "reg:squarederror",
+  nrounds = 100,
+  max_depth = 7,
+  eta = 0.3,
+  gamma = 0,
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = 1,
+  verbose = 0
+)
+
+# Predict on validation set
+dvalid <- xgb.DMatrix(data = X_valid)
+valid_preds <- predict(final_model, dvalid)
+
+# Evaluate
+rmse_val <- sqrt(mean((valid_preds - y_valid)^2))
+r2_val <- 1 - sum((y_valid - valid_preds)^2) / sum((y_valid - mean(y_valid))^2)
+print(paste("Validation RMSE:", round(rmse_val, 4)))
+print(paste("Validation R²:", round(r2_val, 4)))
+```
+
+```{r}
+library(caret)
+library(xgboost)
+
+control <- trainControl(method = "cv", number = 5)
+
+tune_grid <- expand.grid(
+  nrounds = 100,
+  max_depth = c(3, 5, 7),
+  eta = c(0.01, 0.1, 0.3),
+  gamma = 0,
+  colsample_bytree = c(0.7, 1),
+  min_child_weight = 1,
+  subsample = c(0.7, 1)
+)
+
+xgb_caret <- train(
+  x = X_train,
+  y = y_train,
+  method = "xgbTree",
+  trControl = control,
+  tuneGrid = tune_grid,
+  metric = "RMSE"
+)
+
+print(xgb_caret$bestTune)
+```
+```{r}
+importance_matrix <- xgb.importance(model = final_model)
+
+# View in table
+print(importance_matrix)
+
+# Plot it
+xgb.plot.importance(importance_matrix, top_n = 10)
+```
+Now do the predictions 
+```{r}
+X_pred <- model.matrix(~ . -1, data = df_na[, features])
+dpred <- xgb.DMatrix(data = X_pred)
+
+predicted_export_China_dependency <- predict(final_model, dpred)
+
+# fill in the values of the predicted
+df_na2 <- df_na
+df_na2$export_China_dependency <- predicted_export_China_dependency
+df_na2 %>% 
+  filter(country_clean == "North Korea")
+
+# combine with the original dataet.
+df_imputed <- bind_rows(df_train, df_pred_USA)
+df_imputed <- df_imputed %>% arrange(country, year)  # optional sorting
+```
+```{r}
+df2 <- read.csv("All_df_backup copy.csv")
+df2 <- df2[,-1]
+df2
+
+colnames(df2)
+df3 <- df2 %>% 
+  select(-any_of(c("IdealPointAll.x",
+                   "IdealPoints_USA",
+                   "IdealPoints_China")))
+
+df3
+colnames(df3)
+colnames(df)
+
+df_temp <- df %>% 
+  select(country_clean, year, GDP_per_capita)
+
+df4 <- df3 %>% 
+  left_join(df_temp, by = c("country_clean", "year") )
+```
+
+```{r}
+glimpse(df4)
+summary(df4$GDP_per_capita)
+
+nrow(df4)
+nrow(df3)
+```
+```{r}
+df_temp %>%
+  count(country_clean, year) %>%
+  filter(n > 1)
+```
+
+```{r}
+df_temp %>%
+  filter(country_clean %in% c("Central African Republic", "Netherlands")) %>%
+  count(country_clean, year) %>%
+  filter(n > 1)
+```
+
+```{r}
+df_temp %>%
+  filter(country_clean %in% c("Netherlands")) %>%
+  arrange(country_clean, year)
+
+
+df_temp_clean <- df_temp %>%
+  distinct(country_clean, year, .keep_all = TRUE)
+
+df <- df %>%
+  distinct(country_clean, year, .keep_all = TRUE)
+
+nrow(df)
+nrow(df3)
+```
+
+```{r}
+df_temp_clean <- df_temp %>%
+  group_by(country_clean, year) %>%
+  mutate(row_num = row_number()) %>%
+  filter(
+    country_clean != "Central African Republic" | row_num == 1
+  ) %>%
+  select(-row_num) %>%
+  ungroup()
+
+df_temp_clean %>% 
+  filter(country_clean == "Central African Republic")
+
+df <- df %>%
+  group_by(country_clean, year) %>%
+  mutate(row_num = row_number()) %>%
+  filter(
+    country_clean != "Central African Republic" | row_num == 1
+  ) %>%
+  select(-row_num) %>%
+  ungroup()
+  
+
+df %>% 
+  filter(country_clean == "Central African Republic")
+```
+
+##########################
+The data is finally processed well
+
+Fill in the North Korea values 
+```{r}
+colnames(df4)
+
+df4 %>% 
+  filter(country_clean == "North Korea")
+
+library(dplyr)
+
+df4 <- df4 %>%
+  mutate(
+    export_China_dependency = case_when(
+      country_clean == "North Korea" & year >= 2000 & year <= 2023 ~ 0.85,
+      TRUE ~ export_China_dependency
+    ),
+    
+    import_China_dependency = case_when(
+      country_clean == "North Korea" & year >= 2000 & year <= 2023 ~ 0.90,
+      TRUE ~ import_China_dependency
+    ),
+    
+    export_USA_dependency = case_when(
+      country_clean == "North Korea" & year >= 2000 & year <= 2023 ~ 0.00,
+      TRUE ~ export_USA_dependency
+    ),
+    
+    import_USA_dependency = case_when(
+      country_clean == "North Korea" & year >= 2000 & year <= 2023 ~ 0.00,
+      TRUE ~ import_USA_dependency
+    )
+  )
+
+
+missing_countries <- as.vector(df4 %>%
+  filter(is.na(export_USA_dependency)) %>%
+  distinct(country_clean))
+missing_countries
+```
+
+```{r}
+library(dplyr)
+
+# Define country groups by estimated USA export dependency level
+low_dependency <- c(
+  "North Korea", "Iran", "Syria", "Russia", "Belarus", "Cuba", 
+  "Venezuela", "Eritrea", "Afghanistan", "Sudan"
+)
+
+medium_dependency <- c(
+  "Pakistan", "Nepal", "Bangladesh", "Mongolia", "Uzbekistan",
+  "Turkmenistan", "Laos", "Libya", "Djibouti", "Algeria", 
+  "Iraq", "Cameroon", "DR Congo", "Angola", "Rwanda", "Ghana", 
+  "Sri Lanka", "South Sudan", "Nigeria", "Kenya", "Papua New Guinea", 
+  "Honduras"
+)
+
+higher_dependency <- c(
+  "Bosnia and Herzegovina", "Dominican Republic", "Tajikistan",
+  "Guinea", "Liberia", "Sierra Leone", "Togo", "Guinea-Bissau", "Haiti",
+  "Comoros", "Vanuatu", "Solomon Islands", "Bhutan"
+)
+
+# Impute values only where export_USA_dependency is NA
+df4 <- df4 %>%
+  mutate(
+    export_USA_dependency = case_when(
+      country_clean %in% low_dependency & is.na(export_USA_dependency) ~ 0.01,
+      country_clean %in% medium_dependency & is.na(export_USA_dependency) ~ 0.07,
+      country_clean %in% higher_dependency & is.na(export_USA_dependency) ~ 0.15,
+      TRUE ~ export_USA_dependency  # leave other values unchanged
+    )
+  )
+```
+
+
+```{r}
+df4_copy <- df4
+
+df4 %>% 
+  filter(country_clean == "Russia")
+
+```
+
+Deal with Russia
+```{r}
+df4 <- df4 %>%
+  mutate(
+    export_USA_dependency = if_else(
+      country_clean == "Russia" & year %in% c(2022, 2023),
+      0,
+      export_USA_dependency
+    ),
+    import_USA_dependency = if_else(
+      country_clean == "Russia" & year %in% c(2022, 2023),
+      0,
+      import_USA_dependency
+    )
+  )
+
+df4 <- df4 %>%
+  mutate(
+    export_China_dependency = case_when(
+      country_clean == "Russia" & year == 2022 ~ 0.22,
+      country_clean == "Russia" & year == 2023 ~ 0.28,
+      TRUE ~ export_China_dependency
+    ),
+    
+    import_China_dependency = case_when(
+      country_clean == "Russia" & year == 2022 ~ 0.36,
+      country_clean == "Russia" & year == 2023 ~ 0.40,
+      TRUE ~ import_China_dependency
+    )
+  )
+
+df4 %>% 
+  filter(country_clean == "Russia")
+```
+
+Deal with Iran
+```{r}
+df4 %>% 
+  filter(country_clean == "Iran")
+
+df4 <- df4 %>%
+  mutate(
+    export_China_dependency = case_when(
+      country_clean == "Iran" & year == 2023 ~ 0.48,
+      TRUE ~ export_China_dependency
+    ),
+    
+    import_China_dependency = case_when(
+      country_clean == "Iran" & year == 2023 ~ 0.38,
+      TRUE ~ import_China_dependency
+    ),
+    
+    export_USA_dependency = case_when(
+      country_clean == "Iran" & year == 2023 ~ 0.00,
+      TRUE ~ export_USA_dependency
+    ),
+    
+    import_USA_dependency = case_when(
+      country_clean == "Iran" & year == 2023 ~ 0.00,
+      TRUE ~ import_USA_dependency
+    )
+  )
+
+df4 %>% 
+  filter(country_clean == "Iran")
+```
+```{r}
+library(dplyr)
+# Manually fill Iran's missing data for 2007, 2008, 2009, and 2012
+iran_fill <- tibble::tibble(
+  country_clean = "Iran",
+  year = c(2007, 2008, 2009, 2012),
+  Export_China = c(15e8, 21e8, 20e8, 35e8),
+  Export_USA = c(14.5e6, 683e6, 281e6, 251e6),
+  Export_World = c(67.3e9, 73e9, 50.9e9, 87.6e9),
+  Import_China = c(7.5e9, 10.5e9, 11e9, 15e9),
+  Import_USA = c(5.1e6, 10.4e6, 6.5e6, 11e6),
+  Import_World = c(52.96e9, 53e9, 35.2e9, 55e9)
+) %>%
+  mutate(
+    export_China_dependency = Export_China / Export_World,
+    import_China_dependency = Import_China / Import_World,
+    export_USA_dependency = Export_USA / Export_World,
+    import_USA_dependency = Import_USA / Import_World
+  )
+
+# Merge into df4
+df4 <- df4 %>%
+  rows_update(iran_fill, by = c("country_clean", "year"))
+
+df4 %>% 
+  filter(country_clean == "Iran") %>% 
+  select(country_clean, year, export_China_dependency,import_China_dependency,export_USA_dependency,
+         import_USA_dependency)
+
+
+```
+
+```{r}
+df4 %>% 
+  filter(country_clean == "Venezuela") 
+```
+
+```{r}
+write.csv(df4,"df4.csv")
+write.csv(df4_copy,"df4_copy.csv")
+```
+
+
+```{r}
+df4 %>%
+  filter(country_clean == "Syria") %>% 
+  select(year, export_China_dependency, import_China_dependency, export_USA_dependency,import_USA_dependency)
+```
+
+```{r}
+# Load package
+library(imputeTS)
+
+# Step 1: Filter Syria’s time series data
+syria_data <- df4[df4$country_clean == "Syria", ]
+
+# Step 2: Sort by year
+syria_data <- syria_data[order(syria_data$year), ]
+
+# Step 3: Apply Kalman smoothing to each dependency column
+syria_data$export_China_dependency <- na_kalman(syria_data$export_China_dependency, model = "StructTS")
+syria_data$import_China_dependency <- na_kalman(syria_data$import_China_dependency, model = "StructTS")
+syria_data$export_USA_dependency   <- na_kalman(syria_data$export_USA_dependency, model = "StructTS")
+syria_data$import_USA_dependency   <- na_kalman(syria_data$import_USA_dependency, model = "StructTS")
+
+# Step 4: Update only the 2000 row in the original df4
+df4[df4$country_clean == "Syria" & df4$year == 2000, c(
+  "export_China_dependency",
+  "import_China_dependency",
+  "export_USA_dependency",
+  "import_USA_dependency"
+)] <- syria_data[syria_data$year == 2000, c(
+  "export_China_dependency",
+  "import_China_dependency",
+  "export_USA_dependency",
+  "import_USA_dependency"
+)]
+
+df4 %>% 
+  filter(year == 2000, country_clean == "Syria")
+
+# For years >= 2011 and country == "Syria"
+df4 <- df4 %>%
+  mutate(
+    export_USA_dependency = ifelse(country_clean == "Syria" & year >= 2011, 0, export_USA_dependency),
+    import_USA_dependency = ifelse(country_clean == "Syria" & year >= 2011, 0, import_USA_dependency),
+    export_China_dependency = ifelse(country_clean == "Syria" & year >= 2011, 0.02, export_China_dependency),
+    import_China_dependency = ifelse(country_clean == "Syria" & year >= 2011, 0.04, import_China_dependency)
+  )
+```
+
+```{r}
+df4 %>% filter(country_clean == "Syria")
+```
+
+Deal with Belarus
+```{r}
+df4 %>% 
+  filter(country_clean == "Belarus")
+
+df4 <- df4 %>%
+  mutate(
+    export_USA_dependency = case_when(
+      country_clean == "Belarus" & year == 2022 ~ 0.005,
+      country_clean == "Belarus" & year == 2023 ~ 0.004,
+      TRUE ~ export_USA_dependency
+    ),
+    import_USA_dependency = case_when(
+      country_clean == "Belarus" & year == 2022 ~ 0.01,
+      country_clean == "Belarus" & year == 2023 ~ 0.008,
+      TRUE ~ import_USA_dependency
+    ),
+    export_China_dependency = case_when(
+      country_clean == "Belarus" & year == 2022 ~ 0.08,
+      country_clean == "Belarus" & year == 2023 ~ 0.09,
+      TRUE ~ export_China_dependency
+    ),
+    import_China_dependency = case_when(
+      country_clean == "Belarus" & year == 2022 ~ 0.15,
+      country_clean == "Belarus" & year == 2023 ~ 0.17,
+      TRUE ~ import_China_dependency
+    )
+  )
+```
+
+Deal with Cuba
+```{r}
+df4 %>% 
+  filter(country_clean == "Cuba")
+
+# Load the required package
+library(imputeTS)
+library(dplyr)
+
+# Filter Cuba's data and sort by year
+cuba_data <- df4 %>%
+  filter(country_clean == "Cuba") %>%
+  arrange(year)
+
+# Apply Kalman smoothing (model = StructTS) to each dependency column
+cuba_data$export_China_dependency <- na_kalman(cuba_data$export_China_dependency, model = "StructTS")
+cuba_data$import_China_dependency <- na_kalman(cuba_data$import_China_dependency, model = "StructTS")
+cuba_data$export_USA_dependency   <- na_kalman(cuba_data$export_USA_dependency, model = "StructTS")
+cuba_data$import_USA_dependency   <- na_kalman(cuba_data$import_USA_dependency, model = "StructTS")
+
+# Now update only the 2023 row in df4
+df4[df4$country_clean == "Cuba" & df4$year == 2023, c(
+  "export_China_dependency",
+  "import_China_dependency",
+  "export_USA_dependency",
+  "import_USA_dependency"
+)] <- cuba_data[cuba_data$year == 2023, c(
+  "export_China_dependency",
+  "import_China_dependency",
+  "export_USA_dependency",
+  "import_USA_dependency"
+)]
+
+df4 <- df4 %>%
+  mutate(export_China_dependency = ifelse(
+    country_clean == "Cuba" & year == 2023 & export_China_dependency < 0,
+    0,
+    export_China_dependency
+  ))
+
+
+```
+
+```{r}
+df4 %>% 
+  filter(country_clean == "Venezuela")
+
+library(dplyr)
+
+venezuela_revised <- data.frame(
+  country_clean = "Venezuela",
+  year = 2014:2023,
+  export_China_dependency = c(0.012, 0.015, 0.018, 0.022, 0.025, 0.028, 0.031, 0.034, 0.036, 0.038),
+  import_China_dependency = c(0.190, 0.195, 0.200, 0.205, 0.210, 0.215, 0.220, 0.225, 0.230, 0.235),
+  export_USA_dependency = c(0.008, 0.006, 0.004, 0.0025, 0.0015, 0.001, 0.0008, 0.0006, 0.0005, 0.0004),
+  import_USA_dependency = c(0.18, 0.16, 0.14, 0.12, 0.10, 0.085, 0.07, 0.06, 0.05, 0.045)
+)
+
+# Use rows_upsert() to update or insert
+df4 <- df4 %>%
+  rows_upsert(venezuela_revised, by = c("country_clean", "year"))
+```
+```{r}
+df4 <- df4 %>%
+  mutate(
+    Military_Imports_USA = replace_na(Military_Imports_USA, 0),
+    Military_Imports_China = replace_na(Military_Imports_China, 0)
+  )
+
+# Load necessary packages
+library(dplyr)
+library(imputeTS)
+
+# Ensure data is sorted by year
+df4 <- df4 %>%
+  arrange(country_clean, year)
+
+# Apply Kalman smoothing imputation to each relevant column grouped by country
+df4 <- df4 %>%
+  group_by(country_clean) %>%
+  mutate(
+    US_military_aid       = na_kalman(US_military_aid, model = "StructTS"),
+    v2x_libdem            = na_kalman(v2x_libdem, model = "StructTS"),
+    v2x_polyarchy         = na_kalman(v2x_polyarchy, model = "StructTS"),
+    agree_China           = na_kalman(agree_China, model = "StructTS"),
+    agree_USA             = na_kalman(agree_USA, model = "StructTS"),
+    military_drills_China = na_kalman(military_drills_China, model = "StructTS")
+  ) %>%
+  ungroup()
+
+
+df4 %>% 
+  filter(country_clean == "North Korea")
+
+
+```
+
+```{r}
+df4 %>% 
+  filter(country_clean == "Afghanistan")
+
+# Load required libraries
+library(dplyr)
+library(imputeTS)
+
+# Filter only Afghanistan data
+df4_afg <- df4 %>%
+  filter(country_clean == "Afghanistan") %>%
+  arrange(year)
+
+# Impute only the missing years for Afghanistan using Kalman smoothing
+df4_afg <- df4_afg %>%
+  mutate(
+    US_military_aid       = na_kalman(US_military_aid, model = "StructTS"),
+    v2x_libdem            = na_kalman(v2x_libdem, model = "StructTS"),
+    v2x_polyarchy         = na_kalman(v2x_polyarchy, model = "StructTS"),
+    agree_China           = na_kalman(agree_China, model = "StructTS"),
+    agree_USA             = na_kalman(agree_USA, model = "StructTS"),
+    military_drills_China = na_kalman(military_drills_China, model = "StructTS")
+  )
+
+# Replace Afghanistan data in df4 with imputed version
+df4 <- df4 %>%
+  filter(country_clean != "Afghanistan") %>%
+  bind_rows(df4_afg) %>%
+  arrange(country_clean, year)
+
+df4 <- df4 %>%
+  filter(country_clean != "Afghanistan") %>%       # Remove incorrect Afghanistan rows
+  bind_rows(df4_copy %>% filter(country_clean == "Afghanistan")) %>%  # Add correct ones
+  arrange(country_clean, year)  
+
+
+# Load libraries
+library(dplyr)
+library(imputeTS)
+
+# Ensure your data is sorted by country and year
+df4 <- df4 %>%
+  arrange(country_clean, year)
+
+
+
+# Apply Kalman smoothing by country
+df4 <- df4 %>%
+  group_by(country_clean) %>%
+  mutate(
+    export_China_dependency = na_kalman(export_China_dependency, model = "StructTS"),
+    export_USA_dependency   = na_kalman(export_USA_dependency, model = "StructTS"),
+    import_China_dependency = na_kalman(import_China_dependency, model = "StructTS"),
+    import_USA_dependency   = na_kalman(import_USA_dependency, model = "StructTS")
+  ) %>%
+  ungroup()
+
+
+
+```
+
+Deal with Chad
+```{r}
+# Step 1: Create the revised dataset for Chad (2000–2023)
+chad_revised <- data.frame(
+  country_clean = "Chad",
+  year = 2000:2023,
+  
+  # Estimated Export Dependency to China (gradual growth)
+  export_China_dependency = c(
+    0.005, 0.006, 0.007, 0.009, 0.011, 0.013, 0.015, 0.018,
+    0.021, 0.024, 0.027, 0.030, 0.033, 0.036, 0.039, 0.042,
+    0.045, 0.048, 0.051, 0.054, 0.057, 0.060, 0.063, 0.066
+  ),
+  
+  # Estimated Import Dependency to China (moderate growth)
+  import_China_dependency = c(
+    0.04, 0.043, 0.046, 0.049, 0.052, 0.055, 0.058, 0.062,
+    0.066, 0.07, 0.074, 0.078, 0.082, 0.086, 0.090, 0.095,
+    0.100, 0.105, 0.110, 0.115, 0.120, 0.125, 0.130, 0.135
+  ),
+  
+  # Estimated Export Dependency to USA (gradual decline)
+  export_USA_dependency = c(
+    0.03, 0.028, 0.026, 0.024, 0.022, 0.020, 0.018, 0.016,
+    0.014, 0.012, 0.010, 0.009, 0.008, 0.007, 0.0065, 0.006,
+    0.0055, 0.005, 0.0045, 0.004, 0.0035, 0.003, 0.0025, 0.002
+  ),
+  
+  # Estimated Import Dependency to USA (also declining)
+  import_USA_dependency = c(
+    0.06, 0.058, 0.056, 0.054, 0.052, 0.050, 0.048, 0.046,
+    0.044, 0.042, 0.040, 0.038, 0.036, 0.034, 0.032, 0.030,
+    0.028, 0.026, 0.024, 0.022, 0.020, 0.018, 0.016, 0.014
+  )
+)
+
+# Step 2: Update your main dataset df4
+df4 <- df4 %>%
+  rows_update(chad_revised, by = c("country_clean", "year"))
+```
+
+
+
+
+```{r}
+nrow(df4)
+
+colnames(df4)
+
+df5 <- df4 %>% 
+  select(-any_of(c("Export_China","Export_USA","Export_World","Import_China","Import_USA","Import_World")))
+```
+
+
+```{r}
+sum(!complete.cases(df5))
+
+
+```
+
+Use XGboost to predict those missing values with the latest, most adjusted values for 
+
+```{r}
+df_no_na <-df5[complete.cases(df5),]
+df_na <- df5[!complete.cases(df5),]
+```
+
+
+First train the model
+```{r}
+colnames(df_no_na)
+useful_features <- c("agree_China",
+                     "agree_USA",
+                     "Military_Imports_USA",
+                     "Military_Imports_China",
+                     "US_military_aid",
+                     "v2x_libdem",
+                     "v2x_polyarchy",
+                     "military_drills_China",
+                     "IdealPointsDistance_USA",
+                     "IdealPointsDistance_China",
+                     "GDP_per_capita")
+
+```
+```{r}
+library(xgboost)
+library(dplyr)
+library(Matrix)
+
+# Define the features you'll use
+useful_features <- c("agree_China",
+                     "agree_USA",
+                     "Military_Imports_USA",
+                     "Military_Imports_China",
+                     "US_military_aid",
+                     "v2x_libdem",
+                     "v2x_polyarchy",
+                     "military_drills_China",
+                     "IdealPointsDistance_USA",
+                     "IdealPointsDistance_China",
+                     "GDP_per_capita")
+
+# Define your target columns
+target_cols <- c("export_China_dependency", 
+                 "import_China_dependency", 
+                 "export_USA_dependency", 
+                 "import_USA_dependency")
+
+# Separate complete and incomplete datasets
+df_no_na <- df %>% filter(if_all(all_of(target_cols), ~ !is.na(.)))
+df_na <- df %>% filter(if_any(all_of(target_cols), ~ is.na(.)))
+
+# Train XGBoost models and predict missing values
+xgb_models <- list()
+
+for (target in target_cols) {
+  # Prepare training data
+  X_train <- as.matrix(df_no_na[, useful_features])
+  y_train <- df_no_na[[target]]
+  dtrain <- xgb.DMatrix(data = X_train, label = y_train)
+  
+  # Train the model
+  model <- xgboost(
+    data = dtrain,
+    nrounds = 100,
+    objective = "reg:squarederror",
+    verbose = 0
+  )
+  xgb_models[[target]] <- model
+  
+  # Predict missing values
+  na_rows <- which(is.na(df_na[[target]]))
+  if (length(na_rows) > 0) {
+    X_pred <- as.matrix(df_na[na_rows, useful_features])
+    dpred <- xgb.DMatrix(data = X_pred)
+    preds <- predict(model, dpred)
+    df_na[[target]][na_rows] <- preds
+  }
+}
+
+# Combine the two datasets back
+df_filled <- bind_rows(df_no_na, df_na)
+```
+
+Do the clustering
+```{r}
+# Load required libraries
+library(dplyr)
+library(cluster)
+library(factoextra)
+
+# STEP 1: Select features for clustering
+features <- c("export_China_dependency", "import_China_dependency",
+              "export_USA_dependency", "import_USA_dependency",
+              "agree_China", "agree_USA",
+              "Military_Imports_USA", "Military_Imports_China",
+              "US_military_aid", "v2x_libdem", "v2x_polyarchy",
+              "military_drills_China", "IdealPointsDistance_USA",
+              "IdealPointsDistance_China", "GDP_per_capita")
+
+# STEP 2: Prepare the dataset
+df_cluster <- df_filled %>%
+  filter(complete.cases(across(all_of(features)))) %>%
+  select(country_clean, year, all_of(features))
+
+# STEP 3: Scale the data for clustering
+df_scaled <- scale(df_cluster %>% select(-country_clean, -year))
+
+# STEP 4: Determine optimal number of clusters (optional)
+fviz_nbclust(df_scaled, kmeans, method = "wss")  # Elbow method
+
+# STEP 5: Apply K-means clustering (e.g., 3 clusters)
+set.seed(42)
+kmeans_result <- kmeans(df_scaled, centers = 5, nstart = 25)
+
+# STEP 6: Add cluster labels to original data
+df_cluster$cluster <- kmeans_result$cluster
+
+# STEP 7: Visualize clusters
+fviz_cluster(kmeans_result, data = df_scaled,
+             geom = "point", ellipse.type = "norm", main = "K-Means Clustering")
+
+# Optional: View countries in each cluster
+df_cluster_summary <- df_cluster %>% group_by(cluster) %>% summarise(n = n())
+
+# View result
+print(df_cluster_summary)
+```
+
+
+########################################
+Only choose the year of 2023
+```{r}
+# Load required libraries
+library(dplyr)
+library(cluster)
+library(factoextra)
+
+# Define feature columns
+features <- c("export_China_dependency", "import_China_dependency",
+              "export_USA_dependency", "import_USA_dependency",
+              "agree_China", "agree_USA",
+              "Military_Imports_USA", "Military_Imports_China",
+              "US_military_aid", "v2x_libdem", "v2x_polyarchy",
+              "military_drills_China", "IdealPointsDistance_USA",
+              "IdealPointsDistance_China", "GDP_per_capita")
+
+# STEP 1: Filter data for year 2023
+df_2023 <- df_filled %>%
+  filter(year == 2023) %>%
+  filter(complete.cases(across(all_of(features)))) %>%
+  select(country_clean, all_of(features))
+
+# STEP 2: Scale features
+df_2023_scaled <- scale(df_2023 %>% select(-country_clean))
+
+# STEP 3: Run K-means clustering (e.g., k = 3)
+set.seed(42)
+kmeans_2023 <- kmeans(df_2023_scaled, centers = 6, nstart = 25)
+
+# STEP 4: Add cluster labels
+df_2023$cluster <- kmeans_2023$cluster
+
+# STEP 5: Create list of countries by cluster
+countries_by_cluster_2023 <- df_2023 %>%
+  group_by(cluster) %>%
+  summarise(countries = list(unique(country_clean))) %>%
+  deframe()
+
+# View the result
+print(countries_by_cluster_2023)
+```
+
+This result is clearly flawed. The best option is to use the final_final_final_total.csv with no na part. 
+
+```{r}
+library(dplyr)
+colnames(df5)
+df6 <- df5 %>% 
+  select(-any_of(c("export_China_dependency",
+                   "export_USA_dependency",
+                   "import_China_dependency",
+                   "import_USA_dependency")))
+
+df6
+```
+
+```{r}
+# Load required packages
+library(dplyr)
+library(ggplot2)
+
+# ---- Step 1: Filter df6 to only year 2023 ----
+df6_2023 <- df6 %>%
+  filter(year == 2023)
+
+# ---- Step 2: Remove 'economic_sector' column ----
+df6_2023_clean <- df6_2023
+
+# ---- Step 3: Separate country_clean column and numeric features ----
+country_all <- df6_2023_clean$country_clean
+
+# Select only numeric columns (excluding country_clean)
+df_numeric <- df6_2023_clean %>%
+  select(where(is.numeric))
+
+# ---- Step 4: Remove rows with NA in numeric features ----
+df_numeric_no_na <- na.omit(df_numeric)
+country_cleaned <- country_all[complete.cases(df_numeric)]
+
+# ---- Step 5: Scale the numeric data ----
+df_scaled <- scale(df_numeric_no_na)
+
+# ---- Step 6: Apply KMeans clustering ----
+set.seed(42)
+k <- 3  # Change this to any number of clusters you want
+kmeans_result <- kmeans(df_scaled, centers = k, nstart = 25)
+
+# ---- Step 7: Combine cluster results with country_clean ----
+cluster_df <- data.frame(country_clean = country_cleaned,
+                         Cluster = kmeans_result$cluster)
+
+# ---- Step 8: Show countries in each cluster ----
+cluster_groups <- split(cluster_df$country_clean, cluster_df$Cluster)
+
+for (i in 1:length(cluster_groups)) {
+  cat(paste0("\nCluster ", i, ":\n"))
+  print(cluster_groups[[i]])
+}
+
+# ---- Optional: Visualize the clusters using PCA ----
+df_pca <- prcomp(df_scaled)
+pca_data <- data.frame(df_pca$x[, 1:2],
+                       Cluster = factor(kmeans_result$cluster),
+                       Country = country_cleaned)
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster, label = Country)) +
+  geom_point(size = 2) +
+  geom_text(size = 3, vjust = 1.5, hjust = 1.2) +
+  theme_minimal() +
+  labs(title = "K-Means Clustering for Year 2023", x = "PC1", y = "PC2")
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+sum(is.na(df6))
+# ---- Step 1: Filter for year 2023 and remove economic sector ----
+df6_2023 <- df6 %>%
+  filter(year == 2023) 
+
+# ---- Step 2: Separate country_clean and numeric features ----
+country_all <- df6_2023$country_clean
+
+# Select only numeric columns
+df_numeric <- df6_2023 %>%
+  select(where(is.numeric))
+
+# ---- Step 3: Remove rows with any NA/NaN/Inf ----
+# Convert to matrix for clean filtering
+df_numeric_matrix <- as.matrix(df_numeric)
+
+# Only keep rows without NA, NaN, or Inf
+valid_rows <- apply(df_numeric_matrix, 1, function(row) all(is.finite(row)))
+df_numeric_clean <- df_numeric[valid_rows, ]
+country_cleaned <- country_all[valid_rows]
+
+# ---- Step 4: Scale the clean numeric data ----
+df_scaled <- scale(df_numeric_clean)
+
+# ---- Step 5: Apply KMeans clustering ----
+set.seed(42)
+k <- 3
+kmeans_result <- kmeans(df_scaled, centers = k, nstart = 25)
+
+# ---- Step 6: Combine cluster labels with country_clean ----
+cluster_df <- data.frame(country_clean = country_cleaned,
+                         Cluster = kmeans_result$cluster)
+
+# ---- Step 7: Show countries in each cluster ----
+cluster_groups <- split(cluster_df$country_clean, cluster_df$Cluster)
+
+for (i in 1:length(cluster_groups)) {
+  cat(paste0("\nCluster ", i, ":\n"))
+  print(cluster_groups[[i]])
+}
+
+# ---- Optional: PCA plot ----
+df_pca <- prcomp(df_scaled)
+pca_data <- data.frame(df_pca$x[, 1:2],
+                       Cluster = factor(kmeans_result$cluster),
+                       Country = country_cleaned)
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster, label = Country)) +
+  geom_point(size = 2) +
+  geom_text(size = 3, vjust = 1.5, hjust = 1.2) +
+  theme_minimal() +
+  labs(title = "K-Means Clustering for Year 2023", x = "PC1", y = "PC2")
+```
+
+```{r}
+library(dplyr)
+library(forecast)
+
+# --- Step 1: Set country name ---
+target_country <- "Venezuela"
+
+# --- Step 2: Extract 2000–2021 data for Venezuela ---
+venezuela_data <- df6 %>%
+  filter(country_clean == target_country & year >= 2000 & year <= 2021) %>%
+  arrange(year)
+
+# --- Step 3: Forecast IdealPointsDistance_USA ---
+ts_usa <- ts(venezuela_data$IdealPointsDistance_USA, start = 2000)
+model_usa <- auto.arima(ts_usa)
+forecast_usa <- forecast(model_usa, h = 2)
+pred_2022_usa <- forecast_usa$mean[1]
+pred_2023_usa <- forecast_usa$mean[2]
+
+# --- Step 4: Forecast IdealPointsDistance_China ---
+ts_china <- ts(venezuela_data$IdealPointsDistance_China, start = 2000)
+model_china <- auto.arima(ts_china)
+forecast_china <- forecast(model_china, h = 2)
+pred_2022_china <- forecast_china$mean[1]
+pred_2023_china <- forecast_china$mean[2]
+
+# --- Step 5: Forecast GDP_per_capita ---
+ts_gdp <- ts(venezuela_data$GDP_per_capita, start = 2000)
+model_gdp <- auto.arima(ts_gdp)
+forecast_gdp <- forecast(model_gdp, h = 2)
+pred_2022_gdp <- forecast_gdp$mean[1]
+pred_2023_gdp <- forecast_gdp$mean[2]
+
+# --- Step 6: Fill missing values for Venezuela in df6 ---
+df6 <- df6 %>%
+  mutate(
+    IdealPointsDistance_USA = case_when(
+      country_clean == target_country & year == 2022 ~ pred_2022_usa,
+      country_clean == target_country & year == 2023 ~ pred_2023_usa,
+      TRUE ~ IdealPointsDistance_USA
+    ),
+    IdealPointsDistance_China = case_when(
+      country_clean == target_country & year == 2022 ~ pred_2022_china,
+      country_clean == target_country & year == 2023 ~ pred_2023_china,
+      TRUE ~ IdealPointsDistance_China
+    ),
+    GDP_per_capita = case_when(
+      country_clean == target_country & year == 2022 ~ pred_2022_gdp,
+      country_clean == target_country & year == 2023 ~ pred_2023_gdp,
+      TRUE ~ GDP_per_capita
+    )
+  )
+
+# Done!
+```
+
+
+
+Use the K means method to do clustering for the year of 2023. 
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# ---- Step 1: Filter for 2023 and remove economic_sector ----
+df6_2023 <- df6 %>%
+  filter(year == 2023) 
+
+# ---- Step 2: Save country_clean and remove it from clustering features ----
+country_names <- df6_2023$country_clean
+df_numeric <- df6_2023 %>%
+  select(where(is.numeric))
+
+# ---- Step 3: Remove rows with any NA/NaN/Inf values ----
+# Create a logical mask to keep only good rows
+valid_rows <- apply(df_numeric, 1, function(x) all(is.finite(x)))
+df_numeric_clean <- df_numeric[valid_rows, ]
+country_cleaned <- country_names[valid_rows]
+
+# ---- Step 4: Remove columns with zero variance (also breaks scale/kmeans) ----
+df_numeric_clean <- df_numeric_clean %>%
+  select(where(~ sd(., na.rm = TRUE) > 0))
+
+# ---- Step 5: Scale the numeric data ----
+df_scaled <- scale(df_numeric_clean)
+
+# ---- FINAL SAFETY CHECK ----
+if (any(!is.finite(df_scaled))) {
+  stop("Still contains NA/NaN/Inf after cleaning! Check data.")
+}
+
+# ---- Step 6: Apply KMeans ----
+set.seed(42)
+k <- 5
+kmeans_result <- kmeans(df_scaled, centers = k, nstart = 25)
+
+# ---- Step 7: Add cluster labels back to country_clean ----
+cluster_df <- data.frame(country_clean = country_cleaned,
+                         Cluster = kmeans_result$cluster)
+
+# ---- Step 8: View countries per cluster ----
+cluster_groups <- split(cluster_df$country_clean, cluster_df$Cluster)
+
+for (i in seq_along(cluster_groups)) {
+  cat(paste0("\nCluster ", i, ":\n"))
+  print(cluster_groups[[i]])
+}
+
+# ---- Step 9: Optional PCA visualization ----
+df_pca <- prcomp(df_scaled)
+pca_data <- data.frame(df_pca$x[, 1:2],
+                       Cluster = factor(kmeans_result$cluster),
+                       Country = country_cleaned)
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster, label = Country)) +
+  geom_point(size = 2) +
+  geom_text(size = 3, vjust = 1.5, hjust = 1.2) +
+  theme_minimal() +
+  labs(title = "K-Means Clustering for 2023", x = "PC1", y = "PC2")
+```
+```{r}
+cluster_df <- data.frame(
+  country_clean = country_cleaned,   # list of country names
+  Cluster = kmeans_result$cluster    # cluster assignment
+)
+```
+
+```{r}
+# Group countries by their cluster number
+cluster_groups <- split(cluster_df$country_clean, cluster_df$Cluster)
+
+# Print the result in a clean way
+for (i in sort(unique(cluster_df$Cluster))) {
+  cat(paste0("\nCluster ", i, ":\n"))
+  cat(paste(cluster_groups[[as.character(i)]], collapse = ", "), "\n")
+}
+```
+
+```{r}
+library(dplyr)
+
+# Filter and clean
+df6_2023 <- df6 %>%
+  filter(year == 2023) 
+
+country_names <- df6_2023$country_clean
+
+df_numeric <- df6_2023 %>%
+  select(where(is.numeric))
+
+# Remove rows with NA, NaN, Inf
+valid_rows <- apply(df_numeric, 1, function(x) all(is.finite(x)))
+df_clean <- df_numeric[valid_rows, ]
+country_cleaned <- country_names[valid_rows]
+
+# Remove zero-variance columns
+df_clean <- df_clean %>% select(where(~ sd(., na.rm = TRUE) > 0))
+
+# Scale
+df_scaled <- scale(df_clean)
+
+# Hierarchical clustering
+dist_matrix <- dist(df_scaled)
+hc <- hclust(dist_matrix, method = "ward.D2")
+
+# Plot dendrogram
+plot(hc, labels = country_cleaned, main = "Hierarchical Clustering (Ward)", cex = 0.6)
+
+# Cut into 3 clusters (change to what you want)
+hc_clusters <- cutree(hc, k = 3)
+
+# Combine with country names
+hc_result <- data.frame(country_clean = country_cleaned, Cluster = hc_clusters)
+
+# Print countries by cluster
+hc_groups <- split(hc_result$country_clean, hc_result$Cluster)
+for (i in sort(unique(hc_result$Cluster))) {
+  cat(paste0("\nHierarchical Cluster ", i, ":\n"))
+  print(hc_groups[[as.character(i)]])
+}
+```
+Gaussian Mixture Method
+```{r}
+library(mclust)
+
+# Apply GMM (Mclust will choose optimal number of clusters automatically by default)
+gmm_model <- Mclust(df_scaled)
+
+# Summary of model
+summary(gmm_model)
+
+# Get cluster assignments
+gmm_clusters <- gmm_model$classification
+
+# Combine with country names
+gmm_result <- data.frame(country_clean = country_cleaned, Cluster = gmm_clusters)
+
+# Print countries by cluster
+gmm_groups <- split(gmm_result$country_clean, gmm_result$Cluster)
+for (i in sort(unique(gmm_result$Cluster))) {
+  cat(paste0("\nGMM Cluster ", i, ":\n"))
+  print(gmm_groups[[as.character(i)]])
+}
+```
+
